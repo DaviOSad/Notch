@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { LogOut, Plus, Trash2, ChevronLeft, ChevronRight, X, AlertCircle } from 'lucide-react'
+import { LogOut, Plus, Trash2, ChevronLeft, ChevronRight, X, AlertCircle, Search, Repeat } from 'lucide-react'
 
 const COLORS = ['#22c55e', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6']
 
@@ -18,16 +18,20 @@ function getMonthBounds(date) {
 }
 
 export default function Dashboard({ session }) {
-  const [expenses, setExpenses] = useState([])
+  const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
+  // Estados do formulário
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [transactionType, setTransactionType] = useState('expense') // 'expense' ou 'income'
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurringDay, setRecurringDay] = useState(() => new Date().getDate()) // Novo estado para o dia
 
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -41,7 +45,9 @@ export default function Dashboard({ session }) {
   const [showMonthPicker, setShowMonthPicker] = useState(false)
   const [pickerYear, setPickerYear] = useState(currentDate.getFullYear())
 
+  // Estados dos filtros da lista
   const [filterCategory, setFilterCategory] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     if (showMonthPicker) {
@@ -57,7 +63,7 @@ export default function Dashboard({ session }) {
 
   useEffect(() => {
     if (session?.user?.id) {
-      fetchExpenses()
+      fetchTransactions()
     }
   }, [currentDate, session?.user?.id])
 
@@ -72,10 +78,13 @@ export default function Dashboard({ session }) {
     const existingCategories = data ?? []
 
     if (existingCategories.length === 0) {
+      // Cadastra categorias padrões incluindo receitas se a conta for nova
       const defaultCategories = [
-        { name: 'Alimentação', user_id: session.user.id },
-        { name: 'Transporte', user_id: session.user.id },
-        { name: 'Lazer', user_id: session.user.id },
+        { name: 'Alimentação', user_id: session.user.id, type: 'expense' },
+        { name: 'Transporte', user_id: session.user.id, type: 'expense' },
+        { name: 'Lazer', user_id: session.user.id, type: 'expense' },
+        { name: 'Salário', user_id: session.user.id, type: 'income' },
+        { name: 'Investimentos', user_id: session.user.id, type: 'income' },
       ]
 
       const { data: insertedCategories, error: insertError } = await supabase
@@ -89,30 +98,48 @@ export default function Dashboard({ session }) {
       }
 
       setCategories(insertedCategories ?? [])
-      setCategoryId(insertedCategories?.[0]?.id ?? '')
       return
     }
 
     setCategories(existingCategories)
-    setCategoryId((current) => current || existingCategories[0]?.id || '')
   }
 
-  const fetchExpenses = async () => {
+  const fetchTransactions = async () => {
     const { startDate, endDate } = getMonthBounds(currentDate)
 
+    // Ajuste da Query: Pega transações dentro do mês OU transações recorrentes criadas ANTES ou DURANTE o mês
     const { data, error } = await supabase
       .from('expenses')
-      .select('id, amount, description, expense_date, category_id, categories(name)')
-      .gte('expense_date', startDate)
+      .select('id, amount, description, expense_date, category_id, categories(name), type, is_recurring')
       .lte('expense_date', endDate)
-      .order('expense_date', { ascending: false })
+      .or(`expense_date.gte.${startDate},is_recurring.eq.true`)
 
     if (error) {
       console.error(error)
       return
     }
 
-    setExpenses(data ?? [])
+    const viewedYear = currentDate.getFullYear()
+    const viewedMonth = currentDate.getMonth()
+
+    // Lógica para projetar as transações recorrentes no mês atual visualizado
+    const processedData = (data ?? []).map((t) => {
+      if (t.is_recurring) {
+        const originalDay = t.expense_date.split('-')[2]
+        // Se for dia 31 e o mês tiver 28 dias, ele trava no dia 28
+        const lastDayOfMonth = new Date(viewedYear, viewedMonth + 1, 0).getDate()
+        const safeDay = Math.min(Number.parseInt(originalDay, 10), lastDayOfMonth)
+        
+        const newDate = `${viewedYear}-${String(viewedMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
+        return { ...t, expense_date: newDate }
+      }
+      return t
+    })
+
+    // Ordena do mais recente pro mais antigo (já que reescrevemos as datas das recorrentes)
+    processedData.sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date))
+
+    setTransactions(processedData)
   }
 
   const handleAddCategory = async () => {
@@ -124,19 +151,20 @@ export default function Dashboard({ session }) {
       return
     }
 
+    // Verifica se já existe uma categoria com o mesmo nome PARA O MESMO TIPO
     const categoryExists = categories.some(
-      (cat) => cat.name.toLowerCase() === trimmedName.toLowerCase()
+      (cat) => cat.name.toLowerCase() === trimmedName.toLowerCase() && (cat.type || 'expense') === transactionType
     )
 
     if (categoryExists) {
-      setCategoryError('Esta categoria já existe.')
+      setCategoryError('Esta categoria já existe para este tipo de registro.')
       return
     }
 
     setIsSaving(true)
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ name: trimmedName, user_id: session.user.id }])
+      .insert([{ name: trimmedName, user_id: session.user.id, type: transactionType }])
       .select()
     setIsSaving(false)
 
@@ -172,7 +200,7 @@ export default function Dashboard({ session }) {
 
     if (error) {
       if (error.code === '23503') {
-        setErrorMessage('Não é possível excluir esta categoria pois já existem gastos vinculados a ela. Exclua os gastos primeiro.')
+        setErrorMessage('Não é possível excluir esta categoria pois já existem registros vinculados a ela.')
       } else {
         setErrorMessage('Erro ao excluir categoria: ' + error.message)
       }
@@ -181,7 +209,7 @@ export default function Dashboard({ session }) {
 
     const updatedCategories = categories.filter(c => c.id !== categoryToDelete.id)
     setCategories(updatedCategories)
-    setCategoryId(updatedCategories.length > 0 ? updatedCategories[0].id : '')
+    setCategoryId('')
   }
 
   const closeModal = () => {
@@ -189,19 +217,28 @@ export default function Dashboard({ session }) {
     setAmount('')
     setDescription('')
     setExpenseDate(new Date().toISOString().split('T')[0])
+    setTransactionType('expense')
+    setCategoryId('')
+    setIsRecurring(false)
+    setRecurringDay(new Date().getDate())
     setIsAddingCategory(false)
     setCategoryError('')
     setNewCategoryName('')
     setFieldErrors({})
   }
 
-  const handleAddExpense = async (e) => {
+  const handleAddTransaction = async (e) => {
     e.preventDefault()
 
     const errors = {}
     if (!amount) errors.amount = 'Preencha este campo.'
     if (!isAddingCategory && !categoryId) errors.categoryId = 'Preencha este campo.'
-    if (!expenseDate) errors.expenseDate = 'Preencha este campo.'
+    
+    if (isRecurring && !recurringDay) {
+      errors.recurringDay = 'Preencha o dia.'
+    } else if (!isRecurring && !expenseDate) {
+      errors.expenseDate = 'Preencha a data.'
+    }
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
@@ -212,8 +249,17 @@ export default function Dashboard({ session }) {
 
     const parsedAmount = Number.parseFloat(amount)
     if (parsedAmount < 0) {
-      setErrorMessage('O valor do gasto não pode ser negativo.')
+      setErrorMessage('O valor não pode ser negativo.')
       return
+    }
+
+    let finalDate = expenseDate
+    if (isRecurring) {
+      // Cria a data usando o mês e ano atualmente selecionados na tela
+      const y = currentDate.getFullYear()
+      const m = String(currentDate.getMonth() + 1).padStart(2, '0')
+      const d = String(recurringDay).padStart(2, '0')
+      finalDate = `${y}-${m}-${d}`
     }
 
     setIsSaving(true)
@@ -224,7 +270,9 @@ export default function Dashboard({ session }) {
         category_id: categoryId,
         amount: parsedAmount,
         description: description.trim(),
-        expense_date: expenseDate,
+        expense_date: finalDate,
+        type: transactionType,
+        is_recurring: isRecurring
       },
     ])
 
@@ -236,7 +284,7 @@ export default function Dashboard({ session }) {
     }
 
     closeModal()
-    await fetchExpenses()
+    await fetchTransactions()
   }
 
   const handleDelete = async (id) => {
@@ -247,7 +295,7 @@ export default function Dashboard({ session }) {
       return
     }
 
-    await fetchExpenses()
+    await fetchTransactions()
   }
 
   const goToPreviousMonth = () => {
@@ -266,29 +314,53 @@ export default function Dashboard({ session }) {
     })
   }
 
+  // --- CÁLCULOS E FILTROS ---
+
+  // Divisão de categorias para as lógicas de filtro
+  const expenseCategories = useMemo(() => categories.filter(c => c.type === 'expense' || !c.type), [categories])
+  const incomeCategories = useMemo(() => categories.filter(c => c.type === 'income'), [categories])
+  const activeModalCategories = transactionType === 'expense' ? expenseCategories : incomeCategories
+
+  const totalIncome = useMemo(
+    () => transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0),
+    [transactions]
+  )
+
+  const totalExpense = useMemo(
+    () => transactions.filter(t => t.type === 'expense' || !t.type).reduce((sum, t) => sum + Number(t.amount), 0),
+    [transactions]
+  )
+
+  const balance = totalIncome - totalExpense
+
   const expensesByCategory = useMemo(() => {
-    return expenses.reduce((accumulator, expense) => {
-      const categoryName = expense.categories?.name ?? 'Sem categoria'
-      accumulator[categoryName] = (accumulator[categoryName] || 0) + Number(expense.amount)
-      return accumulator
-    }, {})
-  }, [expenses])
+    return transactions
+      .filter(t => t.type === 'expense' || !t.type)
+      .reduce((accumulator, expense) => {
+        const categoryName = expense.categories?.name ?? 'Sem categoria'
+        accumulator[categoryName] = (accumulator[categoryName] || 0) + Number(expense.amount)
+        return accumulator
+      }, {})
+  }, [transactions])
 
   const chartData = Object.entries(expensesByCategory).map(([name, value]) => ({ name, value }))
 
-  const totalMonth = useMemo(
-    () => expenses.reduce((sum, expense) => sum + Number(expense.amount), 0),
-    [expenses],
-  )
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(transaction => {
+      const matchCategory = filterCategory ? transaction.category_id === filterCategory : true
+      const searchLower = searchTerm.toLowerCase()
+      const matchSearch = searchTerm 
+        ? transaction.description?.toLowerCase().includes(searchLower) || 
+          transaction.categories?.name?.toLowerCase().includes(searchLower)
+        : true
 
-  const filteredExpenses = useMemo(() => {
-    if (!filterCategory) return expenses;
-    return expenses.filter(expense => expense.category_id === filterCategory);
-  }, [expenses, filterCategory])
+      return matchCategory && matchSearch
+    });
+  }, [transactions, filterCategory, searchTerm])
 
   const totalFiltered = useMemo(
-    () => filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0),
-    [filteredExpenses]
+    () => filteredTransactions.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0),
+    [filteredTransactions]
   )
 
   return (
@@ -391,11 +463,23 @@ export default function Dashboard({ session }) {
             </div>
           </div>
 
-          <div className="mt-2 w-full">
-            <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-500/15 to-blue-500/10 p-6">
-              <p className="text-sm text-slate-300">Total do mês</p>
-              <p className="mt-2 text-4xl font-bold tracking-tight text-white">
-                R$ {totalMonth.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          <div className="mt-4 grid w-full gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
+              <p className="text-sm text-emerald-200/70">Receitas</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight text-emerald-400">
+                R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-5">
+              <p className="text-sm text-rose-200/70">Despesas</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight text-rose-400">
+                R$ {totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-5">
+              <p className="text-sm text-cyan-200/70">Saldo do mês</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight text-cyan-400">
+                R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
             </div>
           </div>
@@ -405,7 +489,7 @@ export default function Dashboard({ session }) {
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-slate-400">Novo registro</p>
-              <h2 className="text-xl font-bold text-white">Adicionar gasto</h2>
+              <h2 className="text-xl font-bold text-white">Lançamento</h2>
             </div>
             <button
               onClick={() => setShowModal(true)}
@@ -416,14 +500,14 @@ export default function Dashboard({ session }) {
             </button>
           </div>
           <p className="text-sm leading-relaxed text-slate-400">
-            Cadastre um gasto, escolha a categoria e acompanhe a distribuição no gráfico.
+            Cadastre uma despesa ou receita, escolha a categoria e acompanhe seu saldo e a distribuição no gráfico.
           </p>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
-          <h2 className="mb-4 text-lg font-semibold text-white">Gastos por categoria</h2>
+          <h2 className="mb-4 text-lg font-semibold text-white">Despesas por categoria</h2>
           {chartData.length > 0 ? (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -439,7 +523,7 @@ export default function Dashboard({ session }) {
             </div>
           ) : (
             <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 text-sm text-slate-400">
-              Nenhum gasto neste mês.
+              Nenhuma despesa neste mês.
             </div>
           )}
         </section>
@@ -447,103 +531,182 @@ export default function Dashboard({ session }) {
         <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
           <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-semibold text-white">Detalhes dos gastos</h2>
+              <h2 className="text-lg font-semibold text-white">Detalhes do mês</h2>
               <div className="flex items-center gap-2">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-                  {filteredExpenses.length} lançamentos
+                  {filteredTransactions.length} registros
                 </span>
                 {filterCategory && (
-                  <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300">
-                    R$ {totalFiltered.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${totalFiltered >= 0 ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>
+                    R$ {Math.abs(totalFiltered).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 )}
               </div>
             </div>
             
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-cyan-400/60 sm:w-auto"
-            >
-              <option value="" className="bg-slate-900 text-slate-100">Todas as categorias</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id} className="bg-slate-900 text-slate-100">
-                  {category.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {/* Barra de Pesquisa */}
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-slate-950/50 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-cyan-400/60 sm:w-40"
+                />
+              </div>
+
+              {/* Filtro Categoria Agrupado */}
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-cyan-400/60 sm:w-auto"
+              >
+                <option value="" className="bg-slate-900 text-slate-100">Todas as categorias</option>
+                {expenseCategories.length > 0 && (
+                  <optgroup label="Despesas" className="bg-slate-800 text-slate-400 font-semibold">
+                    {expenseCategories.map((category) => (
+                      <option key={category.id} value={category.id} className="bg-slate-900 text-slate-100 font-normal">
+                        {category.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {incomeCategories.length > 0 && (
+                  <optgroup label="Receitas" className="bg-slate-800 text-slate-400 font-semibold">
+                    {incomeCategories.map((category) => (
+                      <option key={category.id} value={category.id} className="bg-slate-900 text-slate-100 font-normal">
+                        {category.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
           </div>
 
           <div className="max-h-[285px] space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-            {filteredExpenses.length > 0 ? (
-              filteredExpenses.map((expense) => (
-                <article key={expense.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div>
-                    <p className="font-semibold text-white">{expense.categories?.name ?? 'Sem categoria'}</p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      {expense.description ? `${expense.description} • ` : ''}{new Date(expense.expense_date).toLocaleDateString('pt-BR')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-white">R$ {Number(expense.amount).toFixed(2)}</span>
-                    <button
-                      onClick={() => handleDelete(expense.id)}
-                      className="rounded-lg p-2 text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
-                      aria-label="Excluir gasto"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </article>
-              ))
+            {filteredTransactions.length > 0 ? (
+              filteredTransactions.map((transaction) => {
+                const isIncome = transaction.type === 'income'
+                return (
+                  <article key={transaction.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-white">{transaction.categories?.name ?? 'Sem categoria'}</p>
+                        {transaction.is_recurring && (
+                          <span title="Lançamento Recorrente">
+                            <Repeat size={14} className="text-cyan-400" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-slate-400">
+                        {transaction.description ? `${transaction.description} • ` : ''}{new Date(transaction.expense_date).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`font-bold ${isIncome ? 'text-emerald-400' : 'text-white'}`}>
+                        {isIncome ? '+ ' : '- '}R$ {Number(transaction.amount).toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => handleDelete(transaction.id)}
+                        className="rounded-lg p-2 text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
+                        aria-label="Excluir"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </article>
+                )
+              })
             ) : (
               <div className="flex h-[285px] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-center text-sm text-slate-400">
-                Nenhum gasto encontrado para os filtros selecionados.
+                Nenhum registro encontrado para os filtros selecionados.
               </div>
             )}
           </div>
         </section>
       </div>
 
-      {/* Modal Principal: Novo Gasto (z-50) */}
+      {/* Modal Principal: Novo Registro (z-50) */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-slate-950/60">
             <div className="mb-6">
               <p className="text-sm text-slate-400">Lançamento</p>
-              <h2 className="text-2xl font-bold text-white">Novo gasto</h2>
+              <h2 className="text-2xl font-bold text-white">Novo registro</h2>
             </div>
 
-            <form onSubmit={handleAddExpense} className="space-y-4" noValidate>
+            {/* Alternador Despesa / Receita */}
+            <div className="mb-6 flex gap-2 rounded-xl bg-slate-950/50 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setTransactionType('expense')
+                  setCategoryId('')
+                  setCategoryError('')
+                  setIsRecurring(false) // Desmarca ao alternar para Despesa
+                }}
+                className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+                  transactionType === 'expense'
+                    ? 'bg-rose-500/20 text-rose-300 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Despesa
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTransactionType('income')
+                  setCategoryId('')
+                  setCategoryError('')
+                  setIsRecurring(true) // Marca automaticamente ao alternar para Receita
+                }}
+                className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+                  transactionType === 'income'
+                    ? 'bg-emerald-500/20 text-emerald-300 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Receita
+              </button>
+            </div>
+
+            <form onSubmit={handleAddTransaction} className="space-y-4" noValidate>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">Valor (R$)</label>
-                <input
-                  type="number"
-                  step="any"
-                  min="0"
-                  value={amount}
-                  onKeyDown={(e) => {
-                    if (e.key === '-' || e.key === 'e' || e.key === 'E') {
-                      e.preventDefault()
-                    }
-                  }}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    if (Number(val) < 0) return
-                    setAmount(val)
-                    if (fieldErrors.amount) setFieldErrors((prev) => ({ ...prev, amount: null }))
-                  }}
-                  className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                    fieldErrors.amount ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
-                  }`}
-                  placeholder="0.00"
-                />
+                <label className="mb-1 block text-sm font-medium text-slate-300">Valor</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">R$</span>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={amount}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                        e.preventDefault()
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (Number(val) < 0) return
+                      setAmount(val)
+                      if (fieldErrors.amount) setFieldErrors((prev) => ({ ...prev, amount: null }))
+                    }}
+                    className={`w-full rounded-xl border bg-slate-950/70 pl-11 pr-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                      fieldErrors.amount ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
+                    }`}
+                    placeholder="0.00"
+                  />
+                </div>
                 {fieldErrors.amount && <p className="mt-1.5 text-xs font-medium text-rose-500">{fieldErrors.amount}</p>}
               </div>
 
               <div>
                 <div className="mb-1 flex items-center justify-between">
-                  <label className="block text-sm font-medium text-slate-300">Categoria</label>
+                  <label className="block text-sm font-medium text-slate-300">Categoria de {transactionType === 'expense' ? 'Despesa' : 'Receita'}</label>
                   {!isAddingCategory && (
                     <div className="flex items-center gap-3">
                       {categoryId && (
@@ -581,7 +744,7 @@ export default function Dashboard({ session }) {
                         className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 ${
                           categoryError ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
                         }`}
-                        placeholder="Nome da categoria..."
+                        placeholder={`Nome da ${transactionType === 'expense' ? 'despesa' : 'receita'}...`}
                         autoFocus
                       />
                       <button
@@ -619,7 +782,7 @@ export default function Dashboard({ session }) {
                       }`}
                     >
                       <option value="" className="bg-slate-900 text-slate-100">Selecione...</option>
-                      {categories.map((category) => (
+                      {activeModalCategories.map((category) => (
                         <option key={category.id} value={category.id} className="bg-slate-900 text-slate-100">
                           {category.name}
                         </option>
@@ -639,27 +802,76 @@ export default function Dashboard({ session }) {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
-                  placeholder="Mercado, combustível, cinema..."
+                  placeholder={
+                    transactionType === 'expense'
+                      ? 'Mercado, combustível, peças do PC...'
+                      : 'Salário, bolsa de estágio, rendimentos...'
+                  }
                 />
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">Data</label>
-                <input
-                  type="date"
-                  value={expenseDate}
-                  onChange={(e) => {
-                    setExpenseDate(e.target.value)
-                    if (fieldErrors.expenseDate) setFieldErrors((prev) => ({ ...prev, expenseDate: null }))
-                  }}
-                  className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition ${
-                    fieldErrors.expenseDate ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
-                  }`}
-                />
-                {fieldErrors.expenseDate && <p className="mt-1.5 text-xs font-medium text-rose-500">{fieldErrors.expenseDate}</p>}
-              </div>
+              {/* Checkbox de Recorrência colocado ANTES do campo de data/dia */}
+              <label className="flex cursor-pointer items-center gap-3 py-1">
+                <div className="relative flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={isRecurring}
+                    onChange={(e) => setIsRecurring(e.target.checked)}
+                    className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-white/20 bg-slate-950/70 transition-all checked:border-cyan-500 checked:bg-cyan-500 hover:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:ring-offset-1 focus:ring-offset-slate-900"
+                  />
+                  <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-900 opacity-0 transition-opacity peer-checked:opacity-100">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M11.6666 3.5L5.24992 9.91667L2.33325 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-slate-300">
+                  Marcar como transação recorrente
+                </span>
+              </label>
 
-              <div className="flex gap-3 pt-2">
+              {/* Alterna dinamicamente entre Data Completa e Apenas o Dia */}
+              {isRecurring ? (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-300">Dia do mês (1 a 31)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={recurringDay}
+                    onChange={(e) => {
+                      let val = Number.parseInt(e.target.value)
+                      if (val < 1) val = 1
+                      if (val > 31) val = 31
+                      setRecurringDay(val || '')
+                      if (fieldErrors.recurringDay) setFieldErrors((prev) => ({ ...prev, recurringDay: null }))
+                    }}
+                    className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                      fieldErrors.recurringDay ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
+                    }`}
+                  />
+                  {fieldErrors.recurringDay && <p className="mt-1.5 text-xs font-medium text-rose-500">{fieldErrors.recurringDay}</p>}
+                </div>
+              ) : (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-300">Data</label>
+                  <input
+                    type="date"
+                    value={expenseDate}
+                    onChange={(e) => {
+                      setExpenseDate(e.target.value)
+                      if (fieldErrors.expenseDate) setFieldErrors((prev) => ({ ...prev, expenseDate: null }))
+                    }}
+                    style={{ colorScheme: 'dark' }}
+                    className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition ${
+                      fieldErrors.expenseDate ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
+                    }`}
+                  />
+                  {fieldErrors.expenseDate && <p className="mt-1.5 text-xs font-medium text-rose-500">{fieldErrors.expenseDate}</p>}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={closeModal}
