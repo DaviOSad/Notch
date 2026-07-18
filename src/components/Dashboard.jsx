@@ -24,14 +24,13 @@ export default function Dashboard({ session }) {
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Estados do formulário
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [transactionType, setTransactionType] = useState('expense') // 'expense' ou 'income'
+  const [transactionType, setTransactionType] = useState('expense')
   const [isRecurring, setIsRecurring] = useState(false)
-  const [recurringDay, setRecurringDay] = useState(() => new Date().getDate()) // Novo estado para o dia
+  const [recurringDay, setRecurringDay] = useState(() => new Date().getDate())
 
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -45,7 +44,6 @@ export default function Dashboard({ session }) {
   const [showMonthPicker, setShowMonthPicker] = useState(false)
   const [pickerYear, setPickerYear] = useState(currentDate.getFullYear())
 
-  // Estados dos filtros da lista
   const [filterCategory, setFilterCategory] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -78,7 +76,6 @@ export default function Dashboard({ session }) {
     const existingCategories = data ?? []
 
     if (existingCategories.length === 0) {
-      // Cadastra categorias padrões incluindo receitas se a conta for nova
       const defaultCategories = [
         { name: 'Alimentação', user_id: session.user.id, type: 'expense' },
         { name: 'Transporte', user_id: session.user.id, type: 'expense' },
@@ -107,7 +104,6 @@ export default function Dashboard({ session }) {
   const fetchTransactions = async () => {
     const { startDate, endDate } = getMonthBounds(currentDate)
 
-    // Ajuste da Query: Pega transações dentro do mês OU transações recorrentes criadas ANTES ou DURANTE o mês
     const { data, error } = await supabase
       .from('expenses')
       .select('id, amount, description, expense_date, category_id, categories(name), type, is_recurring')
@@ -122,11 +118,9 @@ export default function Dashboard({ session }) {
     const viewedYear = currentDate.getFullYear()
     const viewedMonth = currentDate.getMonth()
 
-    // Lógica para projetar as transações recorrentes no mês atual visualizado
     const processedData = (data ?? []).map((t) => {
       if (t.is_recurring) {
         const originalDay = t.expense_date.split('-')[2]
-        // Se for dia 31 e o mês tiver 28 dias, ele trava no dia 28
         const lastDayOfMonth = new Date(viewedYear, viewedMonth + 1, 0).getDate()
         const safeDay = Math.min(Number.parseInt(originalDay, 10), lastDayOfMonth)
         
@@ -136,9 +130,7 @@ export default function Dashboard({ session }) {
       return t
     })
 
-    // Ordena do mais recente pro mais antigo (já que reescrevemos as datas das recorrentes)
     processedData.sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date))
-
     setTransactions(processedData)
   }
 
@@ -151,7 +143,6 @@ export default function Dashboard({ session }) {
       return
     }
 
-    // Verifica se já existe uma categoria com o mesmo nome PARA O MESMO TIPO
     const categoryExists = categories.some(
       (cat) => cat.name.toLowerCase() === trimmedName.toLowerCase() && (cat.type || 'expense') === transactionType
     )
@@ -231,11 +222,11 @@ export default function Dashboard({ session }) {
     e.preventDefault()
 
     const errors = {}
-    if (!amount) errors.amount = 'Preencha este campo.'
-    if (!isAddingCategory && !categoryId) errors.categoryId = 'Preencha este campo.'
+    if (!amount) errors.amount = 'Preencha.'
+    if (!isAddingCategory && !categoryId) errors.categoryId = 'Selecione.'
     
     if (isRecurring && !recurringDay) {
-      errors.recurringDay = 'Preencha o dia.'
+      errors.recurringDay = 'Dia inválido.'
     } else if (!isRecurring && !expenseDate) {
       errors.expenseDate = 'Preencha a data.'
     }
@@ -255,7 +246,6 @@ export default function Dashboard({ session }) {
 
     let finalDate = expenseDate
     if (isRecurring) {
-      // Cria a data usando o mês e ano atualmente selecionados na tela
       const y = currentDate.getFullYear()
       const m = String(currentDate.getMonth() + 1).padStart(2, '0')
       const d = String(recurringDay).padStart(2, '0')
@@ -314,8 +304,6 @@ export default function Dashboard({ session }) {
     })
   }
 
-  // --- CÁLCULOS E FILTROS ---
-
   // Divisão de categorias para as lógicas de filtro
   const expenseCategories = useMemo(() => categories.filter(c => c.type === 'expense' || !c.type), [categories])
   const incomeCategories = useMemo(() => categories.filter(c => c.type === 'income'), [categories])
@@ -364,32 +352,34 @@ export default function Dashboard({ session }) {
   )
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
+    <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:p-6 lg:p-8">
+      {/* Cabeçalho */}
+      <div className="mb-4 sm:mb-6 flex flex-col gap-4 rounded-[2rem] sm:rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.35em] text-cyan-300/80">Dashboard financeiro</p>
-          <h1 className="mt-2 text-3xl font-bold text-white">Meus gastos</h1>
-          <p className="mt-1 text-sm text-slate-400">Acompanhe os valores do mês atual e detalhe por categoria.</p>
+          <p className="text-xs sm:text-sm uppercase tracking-[0.35em] text-cyan-300/80">Dashboard financeiro</p>
+          <h1 className="mt-1.5 sm:mt-2 text-2xl sm:text-3xl font-bold text-white">Meus gastos</h1>
+          <p className="mt-1 text-sm text-slate-400">Acompanhe os valores do mês e detalhe por categoria.</p>
         </div>
 
         <button
           onClick={() => supabase.auth.signOut()}
-          className="inline-flex items-center gap-2 self-start rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-rose-400/40 hover:text-rose-300 md:self-auto"
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-rose-400/40 hover:text-rose-300"
         >
           <LogOut size={18} />
           Sair
         </button>
       </div>
 
-      <div className="mb-6 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-        <div className="relative z-20 flex flex-col justify-between rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
-          <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="mb-4 sm:mb-6 grid gap-4 sm:gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        {/* Bloco de Resumo Financeiro */}
+        <div className="relative z-20 flex flex-col justify-between rounded-[2rem] sm:rounded-3xl border border-white/10 bg-slate-900/70 p-5 sm:p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
+          <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="text-sm text-slate-400">Período</p>
-              <h2 className="text-lg font-semibold text-white">Controle mensal</h2>
+              <p className="text-xs sm:text-sm text-slate-400">Período</p>
+              <h2 className="text-base sm:text-lg font-semibold text-white">Controle mensal</h2>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <button
                 onClick={goToPreviousMonth}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10"
@@ -397,12 +387,12 @@ export default function Dashboard({ session }) {
                 <ChevronLeft size={16} />
               </button>
               
-              <div className="relative flex min-w-[200px] items-center justify-center">
+              <div className="relative flex items-center justify-center">
                 <button
                   onClick={() => setShowMonthPicker(!showMonthPicker)}
-                  className="rounded-lg px-3 py-1.5 text-center text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200 transition hover:bg-white/5 hover:text-cyan-300"
+                  className="rounded-lg px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm font-semibold uppercase tracking-[0.1em] sm:tracking-[0.2em] text-cyan-200 transition hover:bg-white/5 hover:text-cyan-300"
                 >
-                  {currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                  {currentDate.toLocaleString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '')}
                 </button>
 
                 {showMonthPicker && (
@@ -412,7 +402,8 @@ export default function Dashboard({ session }) {
                       onClick={() => setShowMonthPicker(false)}
                     />
                     
-                    <div className="absolute top-[120%] z-50 w-64 rounded-2xl border border-white/10 bg-slate-900/95 p-4 shadow-2xl backdrop-blur-xl">
+                    {/* Popover de Meses - Otimizado para não vazar na lateral em telas pequenas */}
+                    <div className="absolute top-[120%] left-1/2 -translate-x-1/2 md:left-0 md:translate-x-0 z-50 w-[240px] sm:w-64 rounded-2xl border border-white/10 bg-slate-900/95 p-4 shadow-2xl backdrop-blur-xl">
                       <div className="mb-4 flex items-center justify-between">
                         <button
                           onClick={() => setPickerYear(y => y - 1)}
@@ -438,7 +429,7 @@ export default function Dashboard({ session }) {
                                 setCurrentDate(new Date(pickerYear, index, 1))
                                 setShowMonthPicker(false)
                               }}
-                              className={`rounded-xl py-2 text-sm font-medium transition ${
+                              className={`rounded-xl py-2 text-xs sm:text-sm font-medium transition ${
                                 isCurrent 
                                   ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/20' 
                                   : 'text-slate-300 hover:bg-white/10 hover:text-white'
@@ -463,56 +454,59 @@ export default function Dashboard({ session }) {
             </div>
           </div>
 
-          <div className="mt-4 grid w-full gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
-              <p className="text-sm text-emerald-200/70">Receitas</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-emerald-400">
+          {/* Grid de Resumo (Otimizado 2 colunas no mobile) */}
+          <div className="mt-5 grid w-full grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+            <div className="col-span-1 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 sm:p-5">
+              <p className="text-xs sm:text-sm text-emerald-200/70">Receitas</p>
+              <p className="mt-1 text-lg sm:text-2xl font-bold tracking-tight text-emerald-400 truncate">
                 R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
             </div>
-            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-5">
-              <p className="text-sm text-rose-200/70">Despesas</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-rose-400">
+            <div className="col-span-1 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 sm:p-5">
+              <p className="text-xs sm:text-sm text-rose-200/70">Despesas</p>
+              <p className="mt-1 text-lg sm:text-2xl font-bold tracking-tight text-rose-400 truncate">
                 R$ {totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
             </div>
-            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-5">
-              <p className="text-sm text-cyan-200/70">Saldo do mês</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-cyan-400">
+            <div className="col-span-2 sm:col-span-1 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 sm:p-5">
+              <p className="text-xs sm:text-sm text-cyan-200/70">Saldo do mês</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-cyan-400 truncate">
                 R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-col justify-center rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
-          <div className="mb-4 flex items-start justify-between gap-4">
+        {/* Bloco de Novo Registro */}
+        <div className="flex flex-col justify-center rounded-[2rem] sm:rounded-3xl border border-white/10 bg-slate-900/70 p-5 sm:p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
+          <div className="mb-3 flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-slate-400">Novo registro</p>
-              <h2 className="text-xl font-bold text-white">Lançamento</h2>
+              <p className="text-xs sm:text-sm font-medium text-slate-400">Novo registro</p>
+              <h2 className="text-lg sm:text-xl font-bold text-white">Lançamento</h2>
             </div>
             <button
               onClick={() => setShowModal(true)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2 sm:px-5 sm:py-2.5 text-sm font-semibold text-white transition hover:brightness-110 shadow-lg shadow-cyan-500/20"
             >
               <Plus size={18} />
               Novo
             </button>
           </div>
-          <p className="text-sm leading-relaxed text-slate-400">
-            Cadastre uma despesa ou receita, escolha a categoria e acompanhe seu saldo e a distribuição no gráfico.
+          <p className="text-xs sm:text-sm leading-relaxed text-slate-400">
+            Cadastre uma despesa ou receita, escolha a categoria e acompanhe seu saldo e a distribuição.
           </p>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
-          <h2 className="mb-4 text-lg font-semibold text-white">Despesas por categoria</h2>
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+        {/* Gráfico */}
+        <section className="rounded-[2rem] sm:rounded-3xl border border-white/10 bg-slate-900/70 p-5 sm:p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
+          <h2 className="mb-4 text-base sm:text-lg font-semibold text-white">Despesas por categoria</h2>
           {chartData.length > 0 ? (
-            <div className="h-80">
+            <div className="h-64 sm:h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={4} dataKey="value">
+                  <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value">
                     {chartData.map((entry, index) => (
                       <Cell key={`${entry.name}-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
@@ -522,48 +516,47 @@ export default function Dashboard({ session }) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 text-sm text-slate-400">
+            <div className="flex h-64 sm:h-80 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-center text-sm text-slate-400">
               Nenhuma despesa neste mês.
             </div>
           )}
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/30 backdrop-blur">
-          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-semibold text-white">Detalhes do mês</h2>
+        {/* Lista de Transações */}
+        <section className="rounded-[2rem] sm:rounded-3xl border border-white/10 bg-slate-900/70 p-5 sm:p-6 shadow-2xl shadow-slate-950/30 backdrop-blur flex flex-col">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-base sm:text-lg font-semibold text-white">Detalhes do mês</h2>
               <div className="flex items-center gap-2">
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-                  {filteredTransactions.length} registros
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] sm:text-xs text-slate-300 whitespace-nowrap">
+                  {filteredTransactions.length} regs
                 </span>
                 {filterCategory && (
-                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${totalFiltered >= 0 ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] sm:text-xs font-medium whitespace-nowrap ${totalFiltered >= 0 ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>
                     R$ {Math.abs(totalFiltered).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 )}
               </div>
             </div>
             
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {/* Barra de Pesquisa */}
-              <div className="relative">
+            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Buscar..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-slate-950/50 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-cyan-400/60 sm:w-40"
+                  className="w-full rounded-xl border border-white/10 bg-slate-950/50 py-2.5 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-cyan-400/60 sm:w-36"
                 />
               </div>
 
-              {/* Filtro Categoria Agrupado */}
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-cyan-400/60 sm:w-auto"
+                className="w-full flex-1 sm:flex-initial rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2.5 text-sm text-slate-200 outline-none transition focus:border-cyan-400/60 sm:w-auto"
               >
-                <option value="" className="bg-slate-900 text-slate-100">Todas as categorias</option>
+                <option value="" className="bg-slate-900 text-slate-100">Categorias</option>
                 {expenseCategories.length > 0 && (
                   <optgroup label="Despesas" className="bg-slate-800 text-slate-400 font-semibold">
                     {expenseCategories.map((category) => (
@@ -586,27 +579,30 @@ export default function Dashboard({ session }) {
             </div>
           </div>
 
-          <div className="max-h-[285px] space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="flex-1 space-y-3 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar max-h-[50vh] sm:max-h-[320px]">
             {filteredTransactions.length > 0 ? (
               filteredTransactions.map((transaction) => {
                 const isIncome = transaction.type === 'income'
                 return (
-                  <article key={transaction.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div>
+                  <article key={transaction.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-3.5 sm:p-4">
+                    <div className="flex min-w-0 flex-1 flex-col">
                       <div className="flex items-center gap-2">
-                        <p className="font-semibold text-white">{transaction.categories?.name ?? 'Sem categoria'}</p>
+                        <p className="truncate text-sm sm:text-base font-semibold text-white">
+                          {transaction.categories?.name ?? 'Sem categoria'}
+                        </p>
                         {transaction.is_recurring && (
-                          <span title="Lançamento Recorrente">
+                          <span title="Lançamento Recorrente" className="shrink-0">
                             <Repeat size={14} className="text-cyan-400" />
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-slate-400">
+                      <p className="truncate mt-0.5 text-[11px] sm:text-sm text-slate-400">
                         {transaction.description ? `${transaction.description} • ` : ''}{new Date(transaction.expense_date).toLocaleDateString('pt-BR')}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`font-bold ${isIncome ? 'text-emerald-400' : 'text-white'}`}>
+                    
+                    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                      <span className={`text-sm sm:text-base font-bold whitespace-nowrap ${isIncome ? 'text-emerald-400' : 'text-white'}`}>
                         {isIncome ? '+ ' : '- '}R$ {Number(transaction.amount).toFixed(2)}
                       </span>
                       <button
@@ -614,39 +610,41 @@ export default function Dashboard({ session }) {
                         className="rounded-lg p-2 text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
                         aria-label="Excluir"
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" />
                       </button>
                     </div>
                   </article>
                 )
               })
             ) : (
-              <div className="flex h-[285px] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-center text-sm text-slate-400">
-                Nenhum registro encontrado para os filtros selecionados.
+              <div className="flex h-full min-h-[150px] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-center text-sm text-slate-400">
+                Nenhum registro encontrado.
               </div>
             )}
           </div>
         </section>
       </div>
 
-      {/* Modal Principal: Novo Registro (z-50) */}
+      {/* Modal Principal: Novo Registro (Comportamento de Bottom Sheet no Mobile) */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-slate-950/60">
-            <div className="mb-6">
-              <p className="text-sm text-slate-400">Lançamento</p>
-              <h2 className="text-2xl font-bold text-white">Novo registro</h2>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/70 p-0 sm:p-4 backdrop-blur-sm transition-all">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto custom-scrollbar rounded-t-[2rem] sm:rounded-3xl border border-white/10 bg-slate-900 p-6 pb-10 sm:pb-6 shadow-2xl shadow-slate-950/60 animate-slide-up sm:animate-none">
+            {/* Barra de puxar nativa do mobile */}
+            <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-white/10 sm:hidden"></div>
+            
+            <div className="mb-5 sm:mb-6">
+              <p className="text-xs sm:text-sm text-slate-400">Lançamento</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">Novo registro</h2>
             </div>
 
-            {/* Alternador Despesa / Receita */}
-            <div className="mb-6 flex gap-2 rounded-xl bg-slate-950/50 p-1">
+            <div className="mb-5 sm:mb-6 flex gap-2 rounded-xl bg-slate-950/50 p-1">
               <button
                 type="button"
                 onClick={() => {
                   setTransactionType('expense')
                   setCategoryId('')
                   setCategoryError('')
-                  setIsRecurring(false) // Desmarca ao alternar para Despesa
+                  setIsRecurring(false)
                 }}
                 className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
                   transactionType === 'expense'
@@ -662,7 +660,7 @@ export default function Dashboard({ session }) {
                   setTransactionType('income')
                   setCategoryId('')
                   setCategoryError('')
-                  setIsRecurring(true) // Marca automaticamente ao alternar para Receita
+                  setIsRecurring(true)
                 }}
                 className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
                   transactionType === 'income'
@@ -685,9 +683,7 @@ export default function Dashboard({ session }) {
                     min="0"
                     value={amount}
                     onKeyDown={(e) => {
-                      if (e.key === '-' || e.key === 'e' || e.key === 'E') {
-                        e.preventDefault()
-                      }
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault()
                     }}
                     onChange={(e) => {
                       const val = e.target.value
@@ -695,7 +691,7 @@ export default function Dashboard({ session }) {
                       setAmount(val)
                       if (fieldErrors.amount) setFieldErrors((prev) => ({ ...prev, amount: null }))
                     }}
-                    className={`w-full rounded-xl border bg-slate-950/70 pl-11 pr-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                    className={`w-full rounded-xl border bg-slate-950/70 pl-11 pr-4 py-3 sm:py-3.5 text-base sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                       fieldErrors.amount ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
                     }`}
                     placeholder="0.00"
@@ -706,7 +702,7 @@ export default function Dashboard({ session }) {
 
               <div>
                 <div className="mb-1 flex items-center justify-between">
-                  <label className="block text-sm font-medium text-slate-300">Categoria de {transactionType === 'expense' ? 'Despesa' : 'Receita'}</label>
+                  <label className="block text-sm font-medium text-slate-300">Categoria</label>
                   {!isAddingCategory && (
                     <div className="flex items-center gap-3">
                       {categoryId && (
@@ -714,7 +710,6 @@ export default function Dashboard({ session }) {
                           type="button"
                           onClick={confirmDeleteCategory}
                           className="flex items-center gap-1 text-xs font-semibold text-rose-400 transition hover:text-rose-300"
-                          title="Excluir categoria selecionada"
                         >
                           <Trash2 size={13} />
                           Excluir
@@ -741,10 +736,10 @@ export default function Dashboard({ session }) {
                           setNewCategoryName(e.target.value)
                           if (categoryError) setCategoryError('')
                         }}
-                        className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 ${
+                        className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 sm:py-3.5 text-base sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 ${
                           categoryError ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
                         }`}
-                        placeholder={`Nome da ${transactionType === 'expense' ? 'despesa' : 'receita'}...`}
+                        placeholder="Nome da categoria..."
                         autoFocus
                       />
                       <button
@@ -777,7 +772,7 @@ export default function Dashboard({ session }) {
                         setCategoryId(e.target.value)
                         if (fieldErrors.categoryId) setFieldErrors((prev) => ({ ...prev, categoryId: null }))
                       }}
-                      className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition ${
+                      className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 sm:py-3.5 text-base sm:text-sm text-slate-100 outline-none transition ${
                         fieldErrors.categoryId ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
                       }`}
                     >
@@ -801,23 +796,22 @@ export default function Dashboard({ session }) {
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
+                  className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 sm:py-3.5 text-base sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/60"
                   placeholder={
                     transactionType === 'expense'
-                      ? 'Mercado, combustível, peças do PC...'
-                      : 'Salário, bolsa de estágio, rendimentos...'
+                      ? 'Mercado, combustível, etc...'
+                      : 'Salário, rendimentos...'
                   }
                 />
               </div>
 
-              {/* Checkbox de Recorrência colocado ANTES do campo de data/dia */}
               <label className="flex cursor-pointer items-center gap-3 py-1">
                 <div className="relative flex items-center">
                   <input
                     type="checkbox"
                     checked={isRecurring}
                     onChange={(e) => setIsRecurring(e.target.checked)}
-                    className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-white/20 bg-slate-950/70 transition-all checked:border-cyan-500 checked:bg-cyan-500 hover:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:ring-offset-1 focus:ring-offset-slate-900"
+                    className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border border-white/20 bg-slate-950/70 transition-all checked:border-cyan-500 checked:bg-cyan-500 hover:border-cyan-400 focus:outline-none"
                   />
                   <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-900 opacity-0 transition-opacity peer-checked:opacity-100">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -826,11 +820,10 @@ export default function Dashboard({ session }) {
                   </span>
                 </div>
                 <span className="text-sm font-medium text-slate-300">
-                  Marcar como transação recorrente
+                  Transação recorrente mensal
                 </span>
               </label>
 
-              {/* Alterna dinamicamente entre Data Completa e Apenas o Dia */}
               {isRecurring ? (
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-300">Dia do mês (1 a 31)</label>
@@ -846,7 +839,7 @@ export default function Dashboard({ session }) {
                       setRecurringDay(val || '')
                       if (fieldErrors.recurringDay) setFieldErrors((prev) => ({ ...prev, recurringDay: null }))
                     }}
-                    className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                    className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 sm:py-3.5 text-base sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                       fieldErrors.recurringDay ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
                     }`}
                   />
@@ -863,7 +856,7 @@ export default function Dashboard({ session }) {
                       if (fieldErrors.expenseDate) setFieldErrors((prev) => ({ ...prev, expenseDate: null }))
                     }}
                     style={{ colorScheme: 'dark' }}
-                    className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition ${
+                    className={`w-full rounded-xl border bg-slate-950/70 px-4 py-3 sm:py-3.5 text-base sm:text-sm text-slate-100 outline-none transition ${
                       fieldErrors.expenseDate ? 'border-rose-500 focus:border-rose-500' : 'border-white/10 focus:border-cyan-400/60'
                     }`}
                   />
@@ -871,18 +864,18 @@ export default function Dashboard({ session }) {
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 pb-2">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-medium text-slate-200 transition hover:bg-white/10"
+                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 font-medium text-slate-200 transition hover:bg-white/10"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving || isAddingCategory}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
                 >
                   {isSaving ? 'Salvando...' : 'Salvar'}
                 </button>
@@ -892,47 +885,45 @@ export default function Dashboard({ session }) {
         </div>
       )}
 
-      {/* Modal de Confirmação de Exclusão (z-[60]) */}
+      {/* Modal Confirmar Exclusão Categoria */}
       {categoryToDelete && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+          <div className="w-full max-w-sm rounded-[2rem] sm:rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
             <h3 className="mb-2 text-xl font-bold text-white">Excluir categoria</h3>
             <p className="mb-6 text-sm text-slate-300">
-              Tem certeza que deseja excluir a categoria <span className="font-semibold text-white">"{categoryToDelete.name}"</span>?
+              Tem certeza que deseja excluir <span className="font-semibold text-white">"{categoryToDelete.name}"</span>?
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setCategoryToDelete(null)}
-                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 font-medium text-slate-200 transition hover:bg-white/10"
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-medium text-slate-200 transition hover:bg-white/10"
               >
                 Cancelar
               </button>
               <button
                 onClick={executeDeleteCategory}
                 disabled={isSaving}
-                className="flex-1 rounded-xl bg-rose-500 px-4 py-2.5 font-semibold text-white transition hover:bg-rose-600 disabled:opacity-60"
+                className="flex-1 rounded-xl bg-rose-500 px-4 py-3 font-semibold text-white transition hover:bg-rose-600 disabled:opacity-60"
               >
-                {isSaving ? 'Excluindo...' : 'Excluir'}
+                {isSaving ? 'Aguarde...' : 'Excluir'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de Erro Global (z-[70]) */}
+      {/* Modal Erro Global */}
       {errorMessage && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-rose-500/30 bg-slate-900 p-6 shadow-2xl shadow-rose-900/20">
+          <div className="w-full max-w-sm rounded-[2rem] sm:rounded-3xl border border-rose-500/30 bg-slate-900 p-6 shadow-2xl shadow-rose-900/20">
             <div className="mb-3 flex items-center gap-2 text-rose-400">
               <AlertCircle size={24} />
               <h3 className="text-lg font-bold text-white">Aviso</h3>
             </div>
-            <p className="mb-6 text-sm leading-relaxed text-slate-300">
-              {errorMessage}
-            </p>
+            <p className="mb-6 text-sm leading-relaxed text-slate-300">{errorMessage}</p>
             <button
               onClick={() => setErrorMessage('')}
-              className="w-full rounded-xl bg-white/10 px-4 py-2.5 font-semibold text-white transition hover:bg-white/20"
+              className="w-full rounded-xl bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/20"
             >
               Entendi
             </button>
