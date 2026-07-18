@@ -15,7 +15,7 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": "./",
+  "start_url": "/Finances-Dashboard/",
   "display": "standalone",
   "theme_color": "#0f172a",
   "background_color": "#0f172a"
