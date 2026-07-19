@@ -104,8 +104,10 @@ export default function Auth() {
 
           <form onSubmit={handleAuth} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+              {/* Adicionado htmlFor */}
+              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">Email</label>
               <input
+                id="email" // Adicionado ID correspondente
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -115,8 +117,10 @@ export default function Auth() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
+              {/* Adicionado htmlFor */}
+              <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
               <input
+                id="password" // Adicionado ID correspondente
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

@@ -23,7 +23,7 @@ const createChainableMock = (table) => {
     then: (resolve) => {
       // Quando o Dashboard pedir as categorias...
       if (table === 'categories') {
-        resolve({ data: [{ id: 1, name: 'Alimentação', type: 'expense' }], error: null })
+        resolve({ data: [{ id: Date.now(), name: 'Alimentação', type: 'expense' }], error: null })
       } 
       // Quando o Dashboard pedir o histórico de lançamentos...
       else if (table === 'expenses') {
@@ -204,18 +204,24 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.type(amountInput, '500')
 
     const selectBox = screen.getByRole('combobox')
-    await user.selectOptions(selectBox, '1') // Seleciona a categoria Alimentação (ID 1 do mock)
+    
+    // Agora selecionamos usando o texto visual que aparece na tela
+    await user.selectOptions(selectBox, 'Alimentação') 
+
+    // Capturamos a opção e descobrimos qual ID aleatório o mock gerou para ela
+    const selectedOption = screen.getByRole('option', { name: 'Alimentação' })
+    const dynamicCategoryId = selectedOption.value
 
     // Submete
     const submitBtn = screen.getByRole('button', { name: /Confirmar Lançamento/i })
     await user.click(submitBtn)
 
-    // Verifica se o Supabase recebeu o INSERT
+    // Verifica se o Supabase recebeu o INSERT com o ID gerado (seja ele qual for)
     expect(mockInsert).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           amount: 500,
-          category_id: '1',
+          category_id: dynamicCategoryId, // Usa a variável dinâmica aqui!
           type: 'expense'
         })
       ])
