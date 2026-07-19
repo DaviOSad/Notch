@@ -11,8 +11,8 @@ export default function ResetPassword({ onComplete }) {
     e.preventDefault()
     setError('')
 
-    if (password.length < 6) {
-      return setError('A senha deve ter pelo menos 6 caracteres.')
+    if (password.length < 8) {
+      return setError('A senha deve ter pelo menos 8 caracteres.')
     }
     if (password !== confirmPassword) {
       return setError('As senhas não coincidem.')

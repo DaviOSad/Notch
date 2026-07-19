@@ -8,6 +8,12 @@ const mockInsert = vi.fn(function() { return this })
 const mockDelete = vi.fn(function() { return this })
 const mockEq = vi.fn(function() { return this })
 
+// Criamos 14 transações dummy para forçar a paginação (totalizando 16 itens).
+const dummyTransactions = Array.from({ length: 14 }).map((_, i) => ({
+  id: 101 + i, amount: 10, description: `Dummy ${i}`, expense_date: '2026-07-10',
+  category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false
+}))
+
 const createChainableMock = (table) => {
   const builder = {
     select: vi.fn().mockReturnThis(),
@@ -30,14 +36,9 @@ const createChainableMock = (table) => {
       } else if (table === 'expenses') {
         resolve({ 
           data: [
-            { 
-              id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', 
-              category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false 
-            },
-            { 
-              id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', 
-              category_id: 2, categories: { name: 'Transporte' }, type: 'expense', is_recurring: false 
-            }
+            { id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false },
+            { id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', category_id: 2, categories: { name: 'Transporte' }, type: 'expense', is_recurring: false },
+            ...dummyTransactions
           ], 
           error: null 
         })
@@ -70,26 +71,37 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()
   })
 
+  it('deve exibir no máximo 15 lançamentos e permitir carregar mais', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    const editButtons = screen.getAllByTitle('Editar')
+    expect(editButtons).toHaveLength(15)
+
+    const loadMoreBtn = screen.getByRole('button', { name: /Carregar mais lançamentos/i })
+    expect(loadMoreBtn).toBeInTheDocument()
+
+    await user.click(loadMoreBtn)
+
+    const allEditButtons = screen.getAllByTitle('Editar')
+    expect(allEditButtons).toHaveLength(16)
+    expect(screen.queryByRole('button', { name: /Carregar mais lançamentos/i })).not.toBeInTheDocument()
+  })
+
   it('deve filtrar o histórico de lançamentos por categoria', async () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
-    expect(screen.getByText(/Uber/i)).toBeInTheDocument()
-
     const filterSelect = screen.getAllByRole('combobox')[0]
 
-    // Filtra apenas por Alimentação
     await user.selectOptions(filterSelect, 'Alimentação')
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument() 
     expect(screen.queryByText(/Uber/i)).not.toBeInTheDocument()   
 
-    // Filtra apenas por Transporte
     await user.selectOptions(filterSelect, 'Transporte')
     expect(screen.queryByText(/Conta de Luz/i)).not.toBeInTheDocument() 
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()               
 
-    // Limpa o filtro selecionando "Todas as categorias"
     await user.selectOptions(filterSelect, 'Todas as categorias')
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()
@@ -124,7 +136,7 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    // Conta de Luz agora é o segundo item da lista (índice 1) devido à data mais antiga
+    // Conta de Luz fica no índice 1 por causa da ordem cronológica
     await user.click(screen.getAllByTitle('Editar')[1])
     expect(await screen.findByText('Editar Lançamento')).toBeInTheDocument()
 
@@ -143,7 +155,6 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    // Conta de Luz agora é o segundo item da lista (índice 1) devido à data mais antiga
     await user.click(screen.getAllByTitle('Excluir')[1])
     expect(mockDelete).toHaveBeenCalled()
     expect(mockEq).toHaveBeenCalledWith('id', 99)

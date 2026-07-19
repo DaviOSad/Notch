@@ -48,8 +48,8 @@ function useAuthLogic() {
       if (!password) {
         setPasswordError('Preencha este campo.')
         hasValidationErrors = true
-      } else if (password.length < 6) {
-        setPasswordError('A senha deve ter pelo menos 6 caracteres.')
+      } else if (password.length < 8) {
+        setPasswordError('A senha deve ter pelo menos 8 caracteres.')
         hasValidationErrors = true
       } else {
         setPasswordError('')
@@ -86,7 +86,7 @@ function useAuthLogic() {
       } else if (error.message.includes('User already registered')) {
         setErrorMessage('Este email já está cadastrado.')
       } else if (error.message.includes('Password should be at least')) {
-        setPasswordError('A senha deve ter pelo menos 6 caracteres.')
+        setPasswordError('A senha deve ter pelo menos 8 caracteres.')
       } else {
         setErrorMessage('Ocorreu um erro ao processar sua requisição.')
       }
@@ -157,7 +157,7 @@ export default function Auth() {
             <p className="text-sm text-slate-400 leading-relaxed h-10">
               {mode === 'login' && 'Acesse seu dashboard e controle seus gastos.'}
               {mode === 'register' && 'Crie sua conta para acompanhar suas finanças e categorias.'}
-              {mode === 'recovery' && 'Enviaremos um link mágico para você redefinir sua senha.'}
+              {mode === 'recovery' && 'Enviaremos um link para você redefinir sua senha.'}
             </p>
           </div>
 
