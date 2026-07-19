@@ -55,7 +55,6 @@ export default function Dashboard({ session }) {
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [currentDate, setCurrentDate] = useState(() => new Date())
-  const [accumulatedBalance, setAccumulatedBalance] = useState(0) 
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory] = useState('')
   
@@ -134,7 +133,6 @@ export default function Dashboard({ session }) {
 
     const viewedYear = currentDate.getFullYear()
     const viewedMonth = currentDate.getMonth()
-    let accIncome = 0; let accExpense = 0
     const currentMonthData = []
 
     ;(data ?? []).forEach((t) => {
@@ -153,16 +151,10 @@ export default function Dashboard({ session }) {
       } else {
         if (tDate.getFullYear() === viewedYear && tDate.getMonth() === viewedMonth) currentMonthData.push(t)
       }
-
-      if (occurrences > 0) {
-        const val = Number(t.amount) * (t.is_recurring ? occurrences : 1)
-        if (t.type === 'income') accIncome += val; else accExpense += val
-      }
     })
     
     currentMonthData.sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date))
     setTransactions(currentMonthData)
-    setAccumulatedBalance(accIncome - accExpense)
   }
 
   // --- ACTIONS: LANÇAMENTOS E CATEGORIAS ---
@@ -329,7 +321,8 @@ export default function Dashboard({ session }) {
         {/* SUMMARY SECTION */}
         <section className="relative w-full overflow-visible rounded-3xl bg-gradient-to-br from-slate-900 to-slate-900/50 border border-white/5 p-6 shadow-2xl mb-6">
           <div className="flex items-center justify-between mb-6">
-            <p className="text-sm font-medium text-slate-400">Saldo Atual (Acumulado)</p>
+            <h2 className="text-lg font-bold text-white">Resumo do Mês</h2>
+            
             <div className="relative flex items-center gap-1 rounded-full bg-black/20 px-1 py-1">
               <button onClick={() => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-full hover:bg-white/5"><ChevronLeft size={16} /></button>
               <button onClick={() => setShowMonthPicker(!showMonthPicker)} className="text-xs font-bold uppercase tracking-widest text-white w-24 text-center hover:text-cyan-400 transition-colors py-1 px-2 rounded-lg hover:bg-white/5">
@@ -361,7 +354,6 @@ export default function Dashboard({ session }) {
               )}
             </div>
           </div>
-          <h2 className="text-4xl font-black tracking-tighter text-white mb-6">{formatCurrency(accumulatedBalance)}</h2>
           <div className="flex w-full gap-3">
             <StatCard title="Receitas" amount={totalIncome} colorClass="bg-emerald-500/10" borderColor="border-emerald-500/10" textColor="text-emerald-400" />
             <StatCard title="Despesas" amount={totalExpense} colorClass="bg-rose-500/10" borderColor="border-rose-500/10" textColor="text-rose-400" />
