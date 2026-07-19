@@ -128,7 +128,7 @@ describe('Auth Component', () => {
     
     // Simula erro de tamanho de senha do Supabase
     supabase.auth.signUp.mockResolvedValueOnce({
-      error: { message: 'Password should be at least 6 characters' },
+      error: { message: 'Password should be at least 8 characters' },
     })
 
     render(<Auth />)
@@ -142,6 +142,6 @@ describe('Auth Component', () => {
     await user.type(screen.getByLabelText(/Senha/i), '123')
     await user.click(screen.getByRole('button', { name: 'Cadastrar' }))
 
-    expect(await screen.findByText('A senha deve ter pelo menos 6 caracteres.')).toBeInTheDocument()
+    expect(await screen.findByText('A senha deve ter pelo menos 8 caracteres.')).toBeInTheDocument()
   })
 })
