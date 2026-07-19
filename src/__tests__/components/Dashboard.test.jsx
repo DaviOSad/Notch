@@ -1,6 +1,6 @@
 import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Dashboard from './Dashboard'
+import Dashboard from '../../components/Dashboard'
 import { vi } from 'vitest'
 
 const mockUpdate = vi.fn(function() { return this })
@@ -8,9 +8,9 @@ const mockInsert = vi.fn(function() { return this })
 const mockDelete = vi.fn(function() { return this })
 const mockEq = vi.fn(function() { return this })
 
-// Criamos 14 transações dummy para forçar a paginação (totalizando 16 itens).
+// Alteramos a data dos Dummies para '2026-07-01' para que fiquem no fim da paginação
 const dummyTransactions = Array.from({ length: 14 }).map((_, i) => ({
-  id: 101 + i, amount: 10, description: `Dummy ${i}`, expense_date: '2026-07-10',
+  id: 101 + i, amount: 10, description: `Dummy ${i}`, expense_date: '2026-07-01',
   category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false
 }))
 
@@ -29,7 +29,8 @@ const createChainableMock = (table) => {
         resolve({ 
           data: [
             { id: 1, name: 'Alimentação', type: 'expense' },
-            { id: 2, name: 'Transporte', type: 'expense' }
+            { id: 2, name: 'Transporte', type: 'expense' },
+            { id: 3, name: 'Serviços', type: 'expense' }
           ], 
           error: null 
         })
@@ -38,6 +39,7 @@ const createChainableMock = (table) => {
           data: [
             { id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false },
             { id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', category_id: 2, categories: { name: 'Transporte' }, type: 'expense', is_recurring: false },
+            { id: 500, amount: 120.00, description: 'Internet Recorrente', expense_date: '2025-01-05', category_id: 3, categories: { name: 'Serviços' }, type: 'expense', is_recurring: true },
             ...dummyTransactions
           ], 
           error: null 
@@ -50,7 +52,7 @@ const createChainableMock = (table) => {
   return builder;
 }
 
-vi.mock('../supabaseClient', () => ({
+vi.mock('../../supabaseClient', () => ({
   supabase: {
     auth: { signOut: vi.fn(), updateUser: vi.fn().mockResolvedValue({ data: {}, error: null }) },
     from: vi.fn((table) => createChainableMock(table))
@@ -71,6 +73,30 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()
   })
 
+  it('deve processar e exibir transações recorrentes de datas passadas', async () => {
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+    // Agora que as datas dummy foram corrigidas, este item estará entre os primeiros renderizados
+    expect(screen.getByText(/Internet Recorrente/i)).toBeInTheDocument()
+  })
+
+  it('deve realizar a exportação dos dados para CSV', async () => {
+    const user = userEvent.setup()
+    
+    global.URL.createObjectURL = vi.fn()
+    // Interceptamos o clique nativo do navegador com segurança, sem quebrar o React
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('header button:first-of-type'))
+    await user.click(screen.getByRole('button', { name: /Exportar Lançamentos/i }))
+
+    expect(global.URL.createObjectURL).toHaveBeenCalled()
+    expect(clickSpy).toHaveBeenCalled()
+    
+    clickSpy.mockRestore()
+  })
+
   it('deve exibir no máximo 15 lançamentos e permitir carregar mais', async () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
@@ -84,7 +110,7 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(loadMoreBtn)
 
     const allEditButtons = screen.getAllByTitle('Editar')
-    expect(allEditButtons).toHaveLength(16)
+    expect(allEditButtons).toHaveLength(17) // 2 manuais + 1 recorrente + 14 dummy
     expect(screen.queryByRole('button', { name: /Carregar mais lançamentos/i })).not.toBeInTheDocument()
   })
 
@@ -136,7 +162,6 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    // Conta de Luz fica no índice 1 por causa da ordem cronológica
     await user.click(screen.getAllByTitle('Editar')[1])
     expect(await screen.findByText('Editar Lançamento')).toBeInTheDocument()
 

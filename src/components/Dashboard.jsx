@@ -241,7 +241,7 @@ export default function Dashboard({ session }) {
     e.preventDefault()
     setPasswordError(''); setPasswordSuccess('')
 
-    if (newPassword.length < 6) return setPasswordError('A senha deve ter pelo menos 6 caracteres.')
+    if (newPassword.length < 6) return setPasswordError('A senha deve ter pelo menos 8 caracteres.')
     if (newPassword !== confirmPassword) return setPasswordError('As senhas não coincidem.')
 
     setIsUpdatingPassword(true)

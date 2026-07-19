@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import ResetPassword from './ResetPassword'
+import ResetPassword from '../../components/ResetPassword'
 import { vi } from 'vitest'
-import { supabase } from '../supabaseClient'
+import { supabase } from '../../supabaseClient'
 
-vi.mock('../supabaseClient', () => ({
+vi.mock('../../supabaseClient', () => ({
   supabase: {
     auth: {
       updateUser: vi.fn(),
@@ -20,7 +20,6 @@ describe('ResetPassword Component', () => {
   it('deve renderizar a tela de redefinição de senha', () => {
     render(<ResetPassword onComplete={vi.fn()} />)
     expect(screen.getByRole('heading', { name: /Definir nova senha/i })).toBeInTheDocument()
-    //expect(screen.getByPlaceholderText(/seu@email.com/i)).toBeInTheDocument() // Existem dois na tela
   })
 
   it('deve exibir erro se a senha tiver menos de 8 caracteres', async () => {
@@ -28,8 +27,8 @@ describe('ResetPassword Component', () => {
     render(<ResetPassword onComplete={vi.fn()} />)
 
     const inputs = screen.getAllByPlaceholderText(/••••••••/i)
-    await user.type(inputs[0], '123')
-    await user.type(inputs[1], '123')
+    await user.type(inputs[0], '1234567') // 7 caracteres
+    await user.type(inputs[1], '1234567')
     
     await user.click(screen.getByRole('button', { name: /Salvar e Acessar/i }))
 
@@ -51,6 +50,22 @@ describe('ResetPassword Component', () => {
     expect(supabase.auth.updateUser).not.toHaveBeenCalled()
   })
 
+  it('deve exibir erro caso a API do Supabase falhe na atualização', async () => {
+    const user = userEvent.setup()
+    
+    supabase.auth.updateUser.mockResolvedValueOnce({ error: { message: 'Token expirado ou erro de rede' } })
+
+    render(<ResetPassword onComplete={vi.fn()} />)
+
+    const inputs = screen.getAllByPlaceholderText(/••••••••/i)
+    await user.type(inputs[0], 'senhaforte123')
+    await user.type(inputs[1], 'senhaforte123')
+    
+    await user.click(screen.getByRole('button', { name: /Salvar e Acessar/i }))
+
+    expect(await screen.findByText(/Erro ao atualizar a senha: Token expirado ou erro de rede/i)).toBeInTheDocument()
+  })
+
   it('deve chamar supabase.auth.updateUser e onComplete com sucesso', async () => {
     const user = userEvent.setup()
     const mockOnComplete = vi.fn()
@@ -66,7 +81,6 @@ describe('ResetPassword Component', () => {
 
     expect(supabase.auth.updateUser).toHaveBeenCalledWith({ password: 'senhaforte123' })
     
-    // Aguarda o onComplete ser chamado após o updateUser responder
     await waitFor(() => {
       expect(mockOnComplete).toHaveBeenCalledTimes(1)
     })
