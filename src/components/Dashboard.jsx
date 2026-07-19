@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { LogOut, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download } from 'lucide-react'
+import { LogOut, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download, CornerDownRight } from 'lucide-react'
 
 // --- CONSTANTES & HELPERS ---
-const COLORS = ['#22c55e', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6']
+const COLORS = ['#22c55e', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#ec4899', '#3b82f6']
 const MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 const getMonthBounds = (date) => {
@@ -23,10 +23,12 @@ const StatCard = ({ title, amount, colorClass, borderColor, textColor }) => (
   </div>
 )
 
-const TransactionItem = ({ t, onEdit, onDelete }) => (
+const TransactionItem = ({ t, onEdit, onDelete, getCategoryPath }) => (
   <div className="group flex w-full items-center justify-between rounded-2xl bg-slate-900/40 p-4 transition-colors hover:bg-slate-900/80 border border-white/5">
     <div className="flex flex-1 flex-col min-w-0 pr-4">
-      <p className="truncate text-base font-semibold text-slate-100">{t.categories?.name || 'Sem categoria'}</p>
+      <p className="truncate text-base font-semibold text-slate-100 flex items-center gap-1.5">
+        {getCategoryPath(t.category_id)}
+      </p>
       <div className="flex items-center gap-1 mt-0.5">
         <p className="truncate text-xs text-slate-500">
           {t.description ? `${t.description} • ` : ''}
@@ -51,24 +53,19 @@ const TransactionItem = ({ t, onEdit, onDelete }) => (
 
 // --- COMPONENTE PRINCIPAL ---
 export default function Dashboard({ session }) {
-  // Dados Principais
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
-  
-  // NOVO ESTADO: Paginação
   const [visibleCount, setVisibleCount] = useState(15)
   
-  // Modais de Controle
   const [showModal, setShowModal] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showMonthPicker, setShowMonthPicker] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
 
-  // Lógica de Formulário (Lançamentos e Categorias)
   const [isSaving, setIsSaving] = useState(false)
   const [transactionToEdit, setTransactionToEdit] = useState(null)
   const [amount, setAmount] = useState('')
@@ -78,13 +75,15 @@ export default function Dashboard({ session }) {
   const [transactionType, setTransactionType] = useState('expense')
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringDay, setRecurringDay] = useState(() => new Date().getDate())
+  
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryParentId, setNewCategoryParentId] = useState('')
   const [categoryError, setCategoryError] = useState('')
   const [formErrors, setFormErrors] = useState({})
+  
   const [pickerYear, setPickerYear] = useState(currentDate.getFullYear())
 
-  // Lógica de Senha
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -92,12 +91,10 @@ export default function Dashboard({ session }) {
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
-  // Reseta a paginação ao mudar de mês ou filtrar
   useEffect(() => {
     setVisibleCount(15)
   }, [currentDate, filterCategory, searchTerm])
 
-  // Efeitos Globais
   useEffect(() => {
     document.body.style.overflow = (showModal || showSettings || showMonthPicker || categoryToDelete || errorMessage) ? 'hidden' : 'auto'
     return () => { document.body.style.overflow = 'auto' }
@@ -112,16 +109,15 @@ export default function Dashboard({ session }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate, session?.user?.id])
 
-  // --- REQUISIÇÕES AO BANCO ---
   const fetchCategories = async () => {
-    const { data, error } = await supabase.from('categories').select('*').order('created_at', { ascending: true })
+    const { data, error } = await supabase.from('categories').select('*').order('name', { ascending: true })
     if (error) return console.error(error)
     
     if (!data || data.length === 0) {
       const defaultCategories = [
-        { name: 'Alimentação', user_id: session.user.id, type: 'expense' },
-        { name: 'Transporte', user_id: session.user.id, type: 'expense' },
-        { name: 'Salário', user_id: session.user.id, type: 'income' },
+        { name: 'Alimentação', user_id: session.user.id, type: 'expense', parent_id: null },
+        { name: 'Transporte', user_id: session.user.id, type: 'expense', parent_id: null },
+        { name: 'Salário', user_id: session.user.id, type: 'income', parent_id: null },
       ]
       const { data: inserted } = await supabase.from('categories').insert(defaultCategories).select('*')
       setCategories(inserted ?? [])
@@ -134,7 +130,7 @@ export default function Dashboard({ session }) {
     const { endDate } = getMonthBounds(currentDate)
     const { data, error } = await supabase
       .from('expenses')
-      .select('id, amount, description, expense_date, category_id, categories(name), type, is_recurring')
+      .select('id, amount, description, expense_date, category_id, type, is_recurring')
       .lte('expense_date', endDate)
 
     if (error) return console.error(error)
@@ -165,37 +161,64 @@ export default function Dashboard({ session }) {
     setTransactions(currentMonthData)
   }
 
-  // --- ACTIONS: LANÇAMENTOS E CATEGORIAS ---
   const handleAddCategory = async () => {
     setCategoryError('')
     const trimmedName = newCategoryName.trim()
     if (!trimmedName) return setCategoryError('Preencha o nome da categoria.')
 
-    if (categories.some((cat) => cat.name.toLowerCase() === trimmedName.toLowerCase() && (cat.type || 'expense') === transactionType)) {
-      return setCategoryError('Esta categoria já existe.')
-    }
+    const isDuplicate = categories.some((cat) => 
+      cat.name.toLowerCase() === trimmedName.toLowerCase() && 
+      (cat.type || 'expense') === transactionType &&
+      cat.parent_id === (newCategoryParentId || null)
+    )
+
+    if (isDuplicate) return setCategoryError('Esta categoria já existe neste nível.')
 
     setIsSaving(true)
-    const { data, error } = await supabase.from('categories').insert([{ name: trimmedName, user_id: session.user.id, type: transactionType }]).select()
+    const payload = { 
+      name: trimmedName, 
+      user_id: session.user.id, 
+      type: transactionType,
+      parent_id: newCategoryParentId || null 
+    }
+    
+    const { data, error } = await supabase.from('categories').insert([payload]).select()
     setIsSaving(false)
 
     if (error) {
-      setCategoryError(error.code === '23505' ? 'Esta categoria já existe no banco.' : 'Erro ao criar categoria.')
+      setCategoryError(error.message)
     } else if (data) {
       setCategories((prev) => [...prev, data[0]].sort((a, b) => a.name.localeCompare(b.name)))
-      setCategoryId(data[0].id); setNewCategoryName(''); setIsAddingCategory(false); setFormErrors(prev => ({ ...prev, categoryId: null }))
+      setCategoryId(data[0].id)
+      resetCategoryForm()
     }
+  }
+
+  const resetCategoryForm = () => {
+    setIsAddingCategory(false)
+    setNewCategoryName('')
+    setNewCategoryParentId('')
+    setCategoryError('')
+    setFormErrors(prev => ({ ...prev, categoryId: null }))
   }
 
   const executeDeleteCategory = async () => {
     if (!categoryToDelete) return
+    
+    const hasChildren = categories.some(c => c.parent_id === categoryToDelete.id)
+    if (hasChildren) {
+      setErrorMessage('Não é possível excluir esta categoria porque ela possui subcategorias vinculadas.')
+      setCategoryToDelete(null)
+      return
+    }
+
     setIsSaving(true)
     const { error } = await supabase.from('categories').delete().eq('id', categoryToDelete.id)
     setIsSaving(false)
     setCategoryToDelete(null)
 
     if (error) {
-      setErrorMessage(error.code === '23503' ? 'Não é possível excluir esta categoria porque já existem lançamentos associados a ela.' : 'Erro ao excluir categoria: ' + error.message)
+      setErrorMessage(error.code === '23503' ? 'Não é possível excluir esta categoria pois há lançamentos associados a ela.' : 'Erro ao excluir categoria: ' + error.message)
       return
     }
     setCategories(categories.filter(c => c.id !== categoryToDelete.id))
@@ -241,7 +264,7 @@ export default function Dashboard({ session }) {
     e.preventDefault()
     setPasswordError(''); setPasswordSuccess('')
 
-    if (newPassword.length < 6) return setPasswordError('A senha deve ter pelo menos 8 caracteres.')
+    if (newPassword.length < 8) return setPasswordError('A senha deve ter pelo menos 8 caracteres.')
     if (newPassword !== confirmPassword) return setPasswordError('As senhas não coincidem.')
 
     setIsUpdatingPassword(true)
@@ -255,14 +278,41 @@ export default function Dashboard({ session }) {
     }
   }
 
-  // --- EXPORTAÇÃO E NAVEGAÇÃO ---
+  const getCategoryPath = (catId) => {
+    const cat = categories.find(c => c.id === catId)
+    if (!cat) return 'Sem categoria'
+    
+    if (cat.parent_id) {
+      const parent = categories.find(c => c.id === cat.parent_id)
+      return (
+        <>
+          <span className="text-slate-400">{parent?.name || 'Pai excluido'}</span>
+          <CornerDownRight size={14} className="text-slate-600 mx-0.5" />
+          <span>{cat.name}</span>
+        </>
+      )
+    }
+    return cat.name
+  }
+
+  const getParentCategoryName = (catId) => {
+    const cat = categories.find(c => c.id === catId)
+    if (!cat) return 'Sem categoria'
+    if (cat.parent_id) {
+      const parent = categories.find(c => c.id === cat.parent_id)
+      return parent ? parent.name : cat.name
+    }
+    return cat.name
+  }
+
   const handleExportCSV = () => {
     if (transactions.length === 0) return
     const headers = ['Data', 'Categoria', 'Descricao', 'Tipo', 'Valor', 'Recorrente']
     const csvRows = [headers.join(',')]
     
     transactions.forEach(t => {
-      csvRows.push(`${t.expense_date},"${t.categories?.name || 'Sem categoria'}","${t.description || ''}",${t.type === 'income' ? 'Receita' : 'Despesa'},${t.amount},${t.is_recurring ? 'Sim' : 'Nao'}`)
+      const catName = categories.find(c => c.id === t.category_id)?.name || 'Sem categoria'
+      csvRows.push(`${t.expense_date},"${catName}","${t.description || ''}",${t.type === 'income' ? 'Receita' : 'Despesa'},${t.amount},${t.is_recurring ? 'Sim' : 'Nao'}`)
     })
     
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -281,7 +331,7 @@ export default function Dashboard({ session }) {
 
   const closeModal = () => {
     setShowModal(false); setTransactionToEdit(null); setAmount(''); setDescription(''); setCategoryId('')
-    setNewCategoryName(''); setIsAddingCategory(false); setCategoryError(''); setErrorMessage(''); setFormErrors({})
+    resetCategoryForm(); setErrorMessage(''); setFormErrors({})
     setTransactionType('expense'); setIsRecurring(false); setRecurringDay(new Date().getDate())
   }
 
@@ -289,30 +339,39 @@ export default function Dashboard({ session }) {
     setShowSettings(false); setIsChangingPassword(false); setPasswordError(''); setPasswordSuccess(''); setNewPassword(''); setConfirmPassword('')
   }
 
-  // --- CÁLCULOS DERIVADOS ---
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0)
   const totalExpense = transactions.filter(t => t.type === 'expense' || !t.type).reduce((sum, t) => sum + Number(t.amount), 0)
   const monthlyRemaining = totalIncome - totalExpense
 
   const chartData = useMemo(() => {
     const expensesByCategory = transactions.filter(t => t.type === 'expense' || !t.type).reduce((acc, expense) => {
-      const name = expense.categories?.name ?? 'Sem categoria'
-      acc[name] = (acc[name] || 0) + Number(expense.amount)
+      const parentName = getParentCategoryName(expense.category_id)
+      acc[parentName] = (acc[parentName] || 0) + Number(expense.amount)
       return acc
     }, {})
-    return Object.entries(expensesByCategory).map(([name, value]) => ({ name, value }))
-  }, [transactions])
+    return Object.entries(expensesByCategory).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, categories])
 
   const filteredTransactions = transactions.filter(t => {
     const search = searchTerm.toLowerCase()
-    return (filterCategory ? String(t.category_id) === String(filterCategory) : true) && 
-           (searchTerm ? t.description?.toLowerCase().includes(search) || t.categories?.name?.toLowerCase().includes(search) : true)
+    
+    let matchCategory = true
+    if (filterCategory) {
+      const tCat = categories.find(c => c.id === t.category_id)
+      matchCategory = String(t.category_id) === String(filterCategory) || (tCat && String(tCat.parent_id) === String(filterCategory))
+    }
+
+    const tCatName = categories.find(c => c.id === t.category_id)?.name || ''
+    const matchSearch = searchTerm ? t.description?.toLowerCase().includes(search) || tCatName.toLowerCase().includes(search) : true
+    
+    return matchCategory && matchSearch
   })
 
-  // Aplica a limitação para exibir apenas a quantidade 'visibleCount'
   const visibleTransactions = filteredTransactions.slice(0, visibleCount)
 
-  // --- RENDERIZAÇÃO ---
+  const parentCategories = categories.filter(c => !c.parent_id && c.type === transactionType)
+
   return (
     <div className="relative min-h-screen w-full bg-slate-950 font-sans text-slate-100 overflow-x-hidden selection:bg-cyan-500/30">
       <div className="mx-auto w-full max-w-lg md:max-w-5xl px-4 pt-6 pb-28 md:pb-12">
@@ -373,10 +432,9 @@ export default function Dashboard({ session }) {
         </section>
 
         <div className="grid w-full grid-cols-1 md:grid-cols-2 gap-6 items-start">
-          {/* CHART SECTION */}
           {chartData.length > 0 && (
             <section className="w-full h-fit rounded-3xl bg-slate-900/50 border border-white/5 p-5">
-              <h3 className="text-sm font-semibold text-slate-300 mb-6">Despesas por Categoria</h3>
+              <h3 className="text-sm font-semibold text-slate-300 mb-6">Despesas Macro</h3>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
@@ -399,7 +457,6 @@ export default function Dashboard({ session }) {
             </section>
           )}
 
-          {/* HISTORY SECTION */}
           <section className="w-full flex flex-col gap-4">
             <h3 className="text-lg font-bold text-white">Histórico</h3>
             
@@ -415,18 +472,24 @@ export default function Dashboard({ session }) {
                 className="appearance-none rounded-2xl border border-white/5 bg-slate-900/80 px-4 py-4 text-sm text-white outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all sm:w-48 cursor-pointer"
               >
                 <option value="">Todas as categorias</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {categories.filter(c => !c.parent_id).map(parent => (
+                  <optgroup key={parent.id} label={parent.name} className="bg-slate-900 font-bold text-white">
+                    <option value={parent.id}>{parent.name} (Geral)</option>
+                    {categories.filter(sub => sub.parent_id === parent.id).map(sub => (
+                      <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">
+                         ↳ {sub.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
 
             <div className="flex flex-col w-full gap-3 overflow-y-auto max-h-[50vh] md:max-h-[400px] pr-2 custom-scrollbar">
               {visibleTransactions.length > 0 
-                ? visibleTransactions.map((t) => <TransactionItem key={t.id} t={t} onEdit={openEditModal} onDelete={handleDelete} />)
+                ? visibleTransactions.map((t) => <TransactionItem key={t.id} t={t} onEdit={openEditModal} onDelete={handleDelete} getCategoryPath={getCategoryPath} />)
                 : <div className="py-8 text-center text-sm text-slate-500">Nenhuma movimentação.</div>}
               
-              {/* Botão de Paginação - Aparece dinamicamente */}
               {visibleCount < filteredTransactions.length && (
                 <button 
                   onClick={() => setVisibleCount(prev => prev + 15)}
@@ -440,10 +503,8 @@ export default function Dashboard({ session }) {
         </div>
       </div>
 
-      {/* FAB BTN */}
       <button onClick={() => setShowModal(true)} className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 transition-transform active:scale-90 md:bottom-10 md:right-10"><Plus size={28} /></button>
 
-      {/* TRANSACTION MODAL */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeModal} />
@@ -452,8 +513,8 @@ export default function Dashboard({ session }) {
             <h2 className="text-xl font-bold text-white mb-6">{transactionToEdit ? 'Editar Lançamento' : 'Novo Lançamento'}</h2>
             <form onSubmit={handleAddTransaction} noValidate className="flex flex-col gap-5 w-full">
               <div className="flex w-full rounded-xl bg-slate-950 p-1">
-                <button type="button" onClick={() => { setTransactionType('expense'); setIsRecurring(false); setCategoryId(''); setFormErrors({}) }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'expense' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Despesa</button>
-                <button type="button" onClick={() => { setTransactionType('income'); setIsRecurring(true); setCategoryId(''); setFormErrors({}) }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'income' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Receita</button>
+                <button type="button" onClick={() => { setTransactionType('expense'); setIsRecurring(false); setCategoryId(''); setFormErrors({}); resetCategoryForm() }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'expense' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Despesa</button>
+                <button type="button" onClick={() => { setTransactionType('income'); setIsRecurring(true); setCategoryId(''); setFormErrors({}); resetCategoryForm() }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'income' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Receita</button>
               </div>
               <div className="flex flex-col gap-1 w-full">
                 <div className="relative w-full">
@@ -465,24 +526,62 @@ export default function Dashboard({ session }) {
               <div className="flex flex-col gap-2 w-full">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Categoria</label>
-                  {!isAddingCategory && categoryId && <button type="button" onClick={() => setCategoryToDelete(categories.find(c => c.id === categoryId))} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Excluir categoria</button>}
+                  {!isAddingCategory && categoryId && <button type="button" onClick={() => setCategoryToDelete(categories.find(c => c.id === categoryId))} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Excluir</button>}
                 </div>
+                
                 {isAddingCategory ? (
-                  <div className="flex flex-col gap-1 w-full">
-                    <div className="flex gap-2 w-full">
-                      <input type="text" value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCategoryError('') }} autoFocus placeholder="Nome da categoria" className="w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
-                      <button type="button" onClick={handleAddCategory} className="rounded-xl bg-slate-800 px-4 text-sm font-bold text-white hover:bg-slate-700 transition-colors">Criar</button>
-                      <button type="button" onClick={() => { setIsAddingCategory(false); setCategoryError(''); setNewCategoryName(''); setCategoryId('') }} className="flex items-center justify-center rounded-xl bg-slate-900 px-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"><X size={18} /></button>
+                  <div className="flex flex-col gap-3 w-full bg-slate-950/50 p-4 rounded-xl border border-white/5 animate-in fade-in zoom-in-95">
+                    <input type="text" value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCategoryError('') }} autoFocus placeholder="Nome da categoria" className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
+                    
+                    <select value={newCategoryParentId} onChange={(e) => setNewCategoryParentId(e.target.value)} className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500">
+                      <option value="">↳ Categoria Principal (Sem pai)</option>
+                      {parentCategories.map(p => (
+                        <option key={p.id} value={p.id}>Subcategoria de: {p.name}</option>
+                      ))}
+                    </select>
+
+                    <div className="flex gap-2 w-full mt-1">
+                      <button type="button" onClick={handleAddCategory} className="flex-1 rounded-xl bg-cyan-500 py-3 text-sm font-bold text-white hover:bg-cyan-400 transition-colors">Salvar Categoria</button>
+                      <button type="button" onClick={resetCategoryForm} className="rounded-xl bg-slate-800 px-4 flex items-center justify-center text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"><X size={18} /></button>
                     </div>
-                    {categoryError && <span className="text-xs font-medium text-rose-500 ml-1">{categoryError}</span>}
+                    {categoryError && <span className="text-xs font-medium text-rose-500">{categoryError}</span>}
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1 w-full">
-                    <select value={categoryId} onChange={(e) => { if(e.target.value === 'new') setIsAddingCategory(true); else { setCategoryId(e.target.value); setFormErrors(prev => ({ ...prev, categoryId: null })) } }} className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500 ${formErrors.categoryId ? 'border border-rose-500' : ''}`}>
-                      <option value="" disabled>Selecione...</option>
-                      {(transactionType === 'expense' ? categories.filter(c => c.type !== 'income') : categories.filter(c => c.type === 'income')).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      <option value="new" className="text-cyan-400 font-bold">+ Adicionar nova categoria</option>
-                    </select>
+                    <div className="flex gap-2 w-full">
+                      <select 
+                        value={categoryId} 
+                        onChange={(e) => { setCategoryId(e.target.value); setFormErrors(prev => ({ ...prev, categoryId: null })) }} 
+                        className={`flex-1 appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500 ${formErrors.categoryId ? 'border border-rose-500' : ''}`}
+                      >
+                        <option value="" disabled>Selecione...</option>
+                        
+                        {parentCategories.map(parent => (
+                          <optgroup key={parent.id} label={parent.name} className="bg-slate-900 font-bold text-white">
+                            <option value={parent.id} className="text-white font-semibold">{parent.name} (Geral)</option>
+                            {categories.filter(sub => sub.parent_id === parent.id && sub.type === transactionType).map(sub => (
+                              <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">
+                                ↳ {sub.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+
+                      <div className="relative group shrink-0">
+                        <button 
+                          type="button" 
+                          onClick={() => setIsAddingCategory(true)} 
+                          className="flex items-center justify-center h-full aspect-square w-12 rounded-xl bg-slate-950 border border-transparent text-cyan-400 hover:bg-slate-900 hover:text-cyan-300 hover:border-white/5 transition-all outline-none"
+                        >
+                          <Plus size={20} />
+                        </button>
+                        
+                        <div className="pointer-events-none absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity w-max bg-slate-800 text-xs font-medium text-white px-3 py-2 rounded-lg shadow-xl border border-white/10 z-50">
+                          Criar nova categoria
+                        </div>
+                      </div>
+                    </div>
                     {formErrors.categoryId && <span className="text-xs font-medium text-rose-500">{formErrors.categoryId}</span>}
                   </div>
                 )}
@@ -504,7 +603,7 @@ export default function Dashboard({ session }) {
                   {formErrors.date && <span className="text-xs font-medium text-rose-500">{formErrors.date}</span>}
                 </div>
               </div>
-              <button type="submit" disabled={isSaving} className="mt-4 w-full rounded-2xl bg-cyan-500 py-4 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50">
+              <button type="submit" disabled={isSaving || isAddingCategory} className="mt-4 w-full rounded-2xl bg-cyan-500 py-4 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50">
                 {isSaving ? 'Salvando...' : (transactionToEdit ? 'Salvar Alterações' : 'Confirmar Lançamento')}
               </button>
             </form>
@@ -512,7 +611,6 @@ export default function Dashboard({ session }) {
         </div>
       )}
 
-      {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeSettings} />
@@ -557,7 +655,7 @@ export default function Dashboard({ session }) {
         </div>
       )}
 
-      {/* AUX MODALS (DELETE & ERROR) */}
+      {/* AUX MODALS */}
       {categoryToDelete && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setCategoryToDelete(null)} />
