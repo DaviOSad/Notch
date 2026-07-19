@@ -8,16 +8,49 @@ function useAuthLogic() {
   const [password, setPassword] = useState('')
   const [isLogin, setIsLogin] = useState(true)
   const [isAnimating, setIsAnimating] = useState(false)
+  
+  // Estados para as mensagens de feedback
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [emailError, setEmailError] = useState('')       // Estado para erro no input de Email
+  const [passwordError, setPasswordError] = useState('') // Estado para erro no input de Senha
 
   const handleAuth = async (e) => {
     e.preventDefault()
+
+    let hasValidationErrors = false
+
+    // 1. Validação Manual do Email
+    if (!email.trim()) {
+      setEmailError('Preencha este campo.')
+      hasValidationErrors = true
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailError('Insira um email válido.')
+      hasValidationErrors = true
+    } else {
+      setEmailError('')
+    }
+
+    // 2. Validação Manual da Senha
+    if (!password) {
+      setPasswordError('Preencha este campo.')
+      hasValidationErrors = true
+    } else if (password.length < 6) {
+      setPasswordError('A senha deve ter pelo menos 6 caracteres.')
+      hasValidationErrors = true
+    } else {
+      setPasswordError('')
+    }
+
+    // Se houver erros nos inputs, interrompe antes de chamar o banco de dados
+    if (hasValidationErrors) return
+
     setLoading(true)
     setErrorMessage('')
     setSuccessMessage('')
     
-    const { error } = isLogin 
+    // Capturamos o 'data' além do 'error'
+    const { data, error } = isLogin 
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password })
 
@@ -27,11 +60,19 @@ function useAuthLogic() {
       } else if (error.message.includes('User already registered')) {
         setErrorMessage('Este email já está cadastrado.')
       } else if (error.message.includes('Password should be at least')) {
-        setErrorMessage('A senha deve ter pelo menos 6 caracteres.')
+        setPasswordError('A senha deve ter pelo menos 6 caracteres.')
       } else {
         setErrorMessage('Ocorreu um erro ao processar sua requisição.')
       }
     } else if (!isLogin) {
+      
+      // Verificação do bloqueio anti-enumeração do Supabase
+      if (data?.user?.identities && data.user.identities.length === 0) {
+        setErrorMessage('Este email já está cadastrado.')
+        setLoading(false)
+        return // Interrompe a execução para não mostrar o alerta verde
+      }
+
       setSuccessMessage('Conta criada com sucesso! Verifique seu email.')
       setEmail('')
       setPassword('')
@@ -46,6 +87,8 @@ function useAuthLogic() {
       setIsLogin(!isLogin)
       setErrorMessage('')
       setSuccessMessage('')
+      setEmailError('')    // Limpa o erro de email ao trocar de tela
+      setPasswordError('') // Limpa o erro de senha ao trocar de tela
       setEmail('')
       setPassword('')
       setIsAnimating(false)
@@ -55,6 +98,7 @@ function useAuthLogic() {
   return {
     loading, email, setEmail, password, setPassword,
     isLogin, isAnimating, errorMessage, successMessage,
+    emailError, setEmailError, passwordError, setPasswordError,
     handleAuth, toggleMode
   }
 }
@@ -64,6 +108,7 @@ export default function Auth() {
   const {
     loading, email, setEmail, password, setPassword,
     isLogin, isAnimating, errorMessage, successMessage,
+    emailError, setEmailError, passwordError, setPasswordError,
     handleAuth, toggleMode
   } = useAuthLogic()
 
@@ -109,18 +154,27 @@ export default function Auth() {
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-6">
+          {/* Adicionado noValidate para desativar os tooltips do navegador */}
+          <form onSubmit={handleAuth} noValidate className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">Email</label>
               <input
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-3.5 bg-[#0f172a] border border-slate-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner"
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (emailError) setEmailError('') // Limpa o erro ao digitar
+                }}
+                className={`w-full p-3.5 bg-[#0f172a] border ${emailError ? 'border-rose-500' : 'border-slate-700'} rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner`}
                 placeholder="seu@email.com"
                 required
               />
+              {emailError && (
+                <span className="text-xs font-medium text-rose-500 mt-2 block px-1">
+                  {emailError}
+                </span>
+              )}
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
@@ -128,12 +182,19 @@ export default function Auth() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-3.5 bg-[#0f172a] border border-slate-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner"
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  if (passwordError) setPasswordError('') // Limpa o erro ao digitar
+                }}
+                className={`w-full p-3.5 bg-[#0f172a] border ${passwordError ? 'border-rose-500' : 'border-slate-700'} rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner`}
                 placeholder="••••••••"
                 required
-                minLength={6}
               />
+              {passwordError && (
+                <span className="text-xs font-medium text-rose-500 mt-2 block px-1">
+                  {passwordError}
+                </span>
+              )}
             </div>
             <button
               type="submit"
