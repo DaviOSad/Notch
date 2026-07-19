@@ -6,21 +6,20 @@ function useAuthLogic() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [isLogin, setIsLogin] = useState(true)
+  
+  const [mode, setMode] = useState('login') 
   const [isAnimating, setIsAnimating] = useState(false)
   
-  // Estados para as mensagens de feedback
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const [emailError, setEmailError] = useState('')       // Estado para erro no input de Email
-  const [passwordError, setPasswordError] = useState('') // Estado para erro no input de Senha
+  const [emailError, setEmailError] = useState('')       
+  const [passwordError, setPasswordError] = useState('') 
 
   const handleAuth = async (e) => {
     e.preventDefault()
 
     let hasValidationErrors = false
 
-    // 1. Validação Manual do Email
     if (!email.trim()) {
       setEmailError('Preencha este campo.')
       hasValidationErrors = true
@@ -31,26 +30,39 @@ function useAuthLogic() {
       setEmailError('')
     }
 
-    // 2. Validação Manual da Senha
-    if (!password) {
-      setPasswordError('Preencha este campo.')
-      hasValidationErrors = true
-    } else if (password.length < 6) {
-      setPasswordError('A senha deve ter pelo menos 8 caracteres.')
-      hasValidationErrors = true
-    } else {
-      setPasswordError('')
+    if (mode !== 'recovery') {
+      if (!password) {
+        setPasswordError('Preencha este campo.')
+        hasValidationErrors = true
+      } else if (password.length < 6) {
+        setPasswordError('A senha deve ter pelo menos 6 caracteres.')
+        hasValidationErrors = true
+      } else {
+        setPasswordError('')
+      }
     }
 
-    // Se houver erros nos inputs, interrompe antes de chamar o banco de dados
     if (hasValidationErrors) return
 
     setLoading(true)
     setErrorMessage('')
     setSuccessMessage('')
     
-    // Capturamos o 'data' além do 'error'
-    const { data, error } = isLogin 
+    if (mode === 'recovery') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin, 
+      })
+
+      if (error) {
+        setErrorMessage('Ocorreu um erro ao tentar enviar o email.')
+      } else {
+        setSuccessMessage('Email de recuperação enviado! Verifique sua caixa de entrada.')
+      }
+      setLoading(false)
+      return
+    }
+
+    const { data, error } = mode === 'login' 
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password })
 
@@ -64,13 +76,12 @@ function useAuthLogic() {
       } else {
         setErrorMessage('Ocorreu um erro ao processar sua requisição.')
       }
-    } else if (!isLogin) {
+    } else if (mode === 'register') {
       
-      // Verificação do bloqueio anti-enumeração do Supabase
       if (data?.user?.identities && data.user.identities.length === 0) {
         setErrorMessage('Este email já está cadastrado.')
         setLoading(false)
-        return // Interrompe a execução para não mostrar o alerta verde
+        return
       }
 
       setSuccessMessage('Conta criada com sucesso! Verifique seu email.')
@@ -81,14 +92,14 @@ function useAuthLogic() {
     setLoading(false)
   }
 
-  const toggleMode = () => {
+  const toggleMode = (newMode) => {
     setIsAnimating(true)
     setTimeout(() => {
-      setIsLogin(!isLogin)
+      setMode(newMode)
       setErrorMessage('')
       setSuccessMessage('')
-      setEmailError('')    // Limpa o erro de email ao trocar de tela
-      setPasswordError('') // Limpa o erro de senha ao trocar de tela
+      setEmailError('')    
+      setPasswordError('') 
       setEmail('')
       setPassword('')
       setIsAnimating(false)
@@ -97,7 +108,7 @@ function useAuthLogic() {
 
   return {
     loading, email, setEmail, password, setPassword,
-    isLogin, isAnimating, errorMessage, successMessage,
+    mode, isAnimating, errorMessage, successMessage,
     emailError, setEmailError, passwordError, setPasswordError,
     handleAuth, toggleMode
   }
@@ -107,32 +118,32 @@ function useAuthLogic() {
 export default function Auth() {
   const {
     loading, email, setEmail, password, setPassword,
-    isLogin, isAnimating, errorMessage, successMessage,
+    mode, isAnimating, errorMessage, successMessage,
     emailError, setEmailError, passwordError, setPasswordError,
     handleAuth, toggleMode
   } = useAuthLogic()
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0f172a] to-[#020617] p-4 font-sans antialiased text-slate-200">
-      <div className="w-full max-w-md bg-[#1e293b]/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 sm:p-10 border border-slate-700/50">
+      <div className="w-full max-w-md bg-[#1e293b]/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 sm:p-10 border border-slate-700/50 relative overflow-hidden">
         
-        {/* Header Fixo */}
         <div className="text-center mb-6">
           <h3 className="text-sm font-bold text-cyan-400 tracking-[0.2em] uppercase mb-2">
             Nexo
           </h3>
         </div>
 
-        {/* Área Animada */}
         <div className={`transition-all duration-300 transform ${isAnimating ? 'opacity-0 scale-95 translate-y-2' : 'opacity-100 scale-100 translate-y-0'}`}>
           <div className="text-center mb-8">
             <h2 className="text-3xl font-extrabold text-white mb-3">
-              {isLogin ? 'Entrar no sistema' : 'Criar nova conta'}
+              {mode === 'login' && 'Entrar no sistema'}
+              {mode === 'register' && 'Criar nova conta'}
+              {mode === 'recovery' && 'Recuperar senha'}
             </h2>
             <p className="text-sm text-slate-400 leading-relaxed h-10">
-              {isLogin 
-                ? 'Acesse seu dashboard e controle seus gastos.' 
-                : 'Crie sua conta para acompanhar suas finanças e categorias.'}
+              {mode === 'login' && 'Acesse seu dashboard e controle seus gastos.'}
+              {mode === 'register' && 'Crie sua conta para acompanhar suas finanças e categorias.'}
+              {mode === 'recovery' && 'Enviaremos um link mágico para você redefinir sua senha.'}
             </p>
           </div>
 
@@ -154,7 +165,6 @@ export default function Auth() {
             </div>
           )}
 
-          {/* Adicionado noValidate para desativar os tooltips do navegador */}
           <form onSubmit={handleAuth} noValidate className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">Email</label>
@@ -164,7 +174,7 @@ export default function Auth() {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value)
-                  if (emailError) setEmailError('') // Limpa o erro ao digitar
+                  if (emailError) setEmailError('')
                 }}
                 className={`w-full p-3.5 bg-[#0f172a] border ${emailError ? 'border-rose-500' : 'border-slate-700'} rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner`}
                 placeholder="seu@email.com"
@@ -176,49 +186,73 @@ export default function Auth() {
                 </span>
               )}
             </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value)
-                  if (passwordError) setPasswordError('') // Limpa o erro ao digitar
-                }}
-                className={`w-full p-3.5 bg-[#0f172a] border ${passwordError ? 'border-rose-500' : 'border-slate-700'} rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner`}
-                placeholder="••••••••"
-                required
-              />
-              {passwordError && (
-                <span className="text-xs font-medium text-rose-500 mt-2 block px-1">
-                  {passwordError}
-                </span>
-              )}
-            </div>
+            
+            {mode !== 'recovery' && (
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    if (passwordError) setPasswordError('') 
+                  }}
+                  className={`w-full p-3.5 bg-[#0f172a] border ${passwordError ? 'border-rose-500' : 'border-slate-700'} rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner`}
+                  placeholder="••••••••"
+                  required={mode !== 'recovery'}
+                />
+                {passwordError && (
+                  <span className="text-xs font-medium text-rose-500 mt-2 block px-1">
+                    {passwordError}
+                  </span>
+                )}
+                
+                {/* O botão 'Esqueci a senha' foi movido para cá, abaixo do input */}
+                {mode === 'login' && (
+                  <div className="mt-3 flex justify-end">
+                    <button type="button" onClick={() => toggleMode('recovery')} className="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
+                      Esqueci a senha?
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading || isAnimating}
               className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold p-3.5 rounded-xl hover:from-blue-500 hover:to-cyan-400 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-300 mt-4 text-base flex justify-center items-center shadow-lg shadow-blue-500/25"
             >
-              {loading ? 'Processando...' : isLogin ? 'Entrar' : 'Cadastrar'}
+              {loading ? 'Processando...' : mode === 'login' ? 'Entrar' : mode === 'register' ? 'Cadastrar' : 'Enviar link de recuperação'}
             </button>
           </form>
         </div>
         
-        {/* Footer de Navegação */}
         <div className="mt-8 text-center border-t border-slate-700/50 pt-6">
-          <button
-            onClick={toggleMode}
-            type="button"
-            disabled={isAnimating}
-            className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors disabled:cursor-wait"
-          >
-            {isLogin ? 'Não tem conta? ' : 'Já tem conta? '}
-            <span className="text-cyan-400 underline decoration-cyan-400/30 underline-offset-4">
-              {isLogin ? 'Cadastre-se' : 'Entre aqui'}
-            </span>
-          </button>
+          {mode === 'recovery' ? (
+            <button
+              onClick={() => toggleMode('login')}
+              type="button"
+              disabled={isAnimating}
+              className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2 mx-auto disabled:cursor-wait"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+              Voltar ao Login
+            </button>
+          ) : (
+            <button
+              onClick={() => toggleMode(mode === 'login' ? 'register' : 'login')}
+              type="button"
+              disabled={isAnimating}
+              className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors disabled:cursor-wait"
+            >
+              {mode === 'login' ? 'Não tem conta? ' : 'Já tem conta? '}
+              <span className="text-cyan-400 underline decoration-cyan-400/30 underline-offset-4">
+                {mode === 'login' ? 'Cadastre-se' : 'Entre aqui'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </div>

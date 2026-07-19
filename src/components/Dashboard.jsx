@@ -58,6 +58,9 @@ export default function Dashboard({ session }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   
+  // NOVO ESTADO: Paginação
+  const [visibleCount, setVisibleCount] = useState(15)
+  
   // Modais de Controle
   const [showModal, setShowModal] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -88,6 +91,11 @@ export default function Dashboard({ session }) {
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
+
+  // Reseta a paginação ao mudar de mês ou filtrar
+  useEffect(() => {
+    setVisibleCount(15)
+  }, [currentDate, filterCategory, searchTerm])
 
   // Efeitos Globais
   useEffect(() => {
@@ -301,6 +309,9 @@ export default function Dashboard({ session }) {
            (searchTerm ? t.description?.toLowerCase().includes(search) || t.categories?.name?.toLowerCase().includes(search) : true)
   })
 
+  // Aplica a limitação para exibir apenas a quantidade 'visibleCount'
+  const visibleTransactions = filteredTransactions.slice(0, visibleCount)
+
   // --- RENDERIZAÇÃO ---
   return (
     <div className="relative min-h-screen w-full bg-slate-950 font-sans text-slate-100 overflow-x-hidden selection:bg-cyan-500/30">
@@ -411,9 +422,19 @@ export default function Dashboard({ session }) {
             </div>
 
             <div className="flex flex-col w-full gap-3 overflow-y-auto max-h-[50vh] md:max-h-[400px] pr-2 custom-scrollbar">
-              {filteredTransactions.length > 0 
-                ? filteredTransactions.map((t) => <TransactionItem key={t.id} t={t} onEdit={openEditModal} onDelete={handleDelete} />)
+              {visibleTransactions.length > 0 
+                ? visibleTransactions.map((t) => <TransactionItem key={t.id} t={t} onEdit={openEditModal} onDelete={handleDelete} />)
                 : <div className="py-8 text-center text-sm text-slate-500">Nenhuma movimentação.</div>}
+              
+              {/* Botão de Paginação - Aparece dinamicamente */}
+              {visibleCount < filteredTransactions.length && (
+                <button 
+                  onClick={() => setVisibleCount(prev => prev + 15)}
+                  className="w-full py-4 mt-1 text-sm font-semibold text-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/10 border border-cyan-500/10 rounded-2xl transition-all"
+                >
+                  Carregar mais lançamentos...
+                </button>
+              )}
             </div>
           </section>
         </div>
