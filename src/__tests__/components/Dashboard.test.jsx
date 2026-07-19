@@ -10,7 +10,7 @@ const mockEq = vi.fn(function() { return this })
 
 const dummyTransactions = Array.from({ length: 14 }).map((_, i) => ({
   id: 101 + i, amount: 10, description: `Dummy ${i}`, expense_date: '2026-07-01',
-  category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false
+  category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false, created_at: '2026-07-01T10:00:00Z'
 }))
 
 const createChainableMock = (table) => {
@@ -36,9 +36,9 @@ const createChainableMock = (table) => {
       } else if (table === 'expenses') {
         resolve({ 
           data: [
-            { id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', category_id: 1, type: 'expense', is_recurring: false },
-            { id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', category_id: 2, type: 'expense', is_recurring: false },
-            { id: 500, amount: 120.00, description: 'Internet Recorrente', expense_date: '2025-01-05', category_id: 3, type: 'expense', is_recurring: true },
+            { id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', category_id: 1, type: 'expense', is_recurring: false, created_at: '2026-07-15T12:00:00Z' },
+            { id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', category_id: 2, type: 'expense', is_recurring: false, created_at: '2026-07-16T12:00:00Z' },
+            { id: 500, amount: 120.00, description: 'Internet Recorrente', expense_date: '2025-01-05', category_id: 3, type: 'expense', is_recurring: true, created_at: '2025-01-05T12:00:00Z' },
             ...dummyTransactions
           ], 
           error: null 

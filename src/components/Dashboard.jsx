@@ -200,7 +200,8 @@ export default function Dashboard({ session }) {
     const { endDate } = getMonthBounds(currentDate)
     const { data, error } = await supabase
       .from('expenses')
-      .select('id, amount, description, expense_date, category_id, type, is_recurring')
+      // Adicionado created_at ao select para ordenação de precisão
+      .select('id, amount, description, expense_date, category_id, type, is_recurring, created_at')
       .lte('expense_date', endDate)
 
     if (error) return console.error(error)
@@ -227,7 +228,17 @@ export default function Dashboard({ session }) {
       }
     })
     
-    currentMonthData.sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date))
+    // Nova lógica de ordenação blindada (Dia > Momento de criação)
+    currentMonthData.sort((a, b) => {
+      const timeA = new Date(a.expense_date).getTime();
+      const timeB = new Date(b.expense_date).getTime();
+      if (timeA !== timeB) return timeB - timeA;
+      
+      const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return createdB - createdA;
+    });
+
     setTransactions(currentMonthData)
   }
 
@@ -250,8 +261,9 @@ export default function Dashboard({ session }) {
     const { data, error } = await supabase.from('categories').insert([payload]).select()
     setIsSaving(false)
 
-    if (error) setCategoryError(error.message)
-    else if (data && data.length > 0) {
+    if (error) {
+      setCategoryError(error.message)
+    } else if (data && data.length > 0) {
       setCategories((prev) => {
         if (prev.some(c => c.id === data[0].id)) {
           return [...prev, { ...data[0], id: Date.now() }].sort((a, b) => a.name.localeCompare(b.name));
@@ -402,7 +414,6 @@ export default function Dashboard({ session }) {
       if (catData && catData.length > 0) metaCat = catData[0]
     }
 
-    // Fallback absoluto de segurança se a criação falhar: pega a primeira daquele tipo
     if (!metaCat) {
        metaCat = categories.find(c => c.type === targetType && !c.parent_id) || categories[0]
     }
@@ -612,7 +623,7 @@ export default function Dashboard({ session }) {
             </div>
           </div>
           <div className="flex w-full gap-3">
-            <StatCard title="Receitas" amount={totalIncome} colorClass="bg-emerald-500/10" borderColor="border-emerald-500/10" textColor="text-emerald-400" />
+            <StatCard title="Receitas" amount={totalIncome} colorClass="bg-emerald-500/10" borderColor="border-emerald-500/10" textColor="textemerald-400" />
             <StatCard title="Despesas" amount={totalExpense} colorClass="bg-rose-500/10" borderColor="border-rose-500/10" textColor="text-rose-400" />
             <StatCard title="Restante (Mês)" amount={monthlyRemaining} colorClass="bg-cyan-500/10" borderColor="border-cyan-500/10" textColor="text-cyan-400" />
           </div>
