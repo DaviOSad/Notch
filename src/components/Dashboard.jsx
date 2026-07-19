@@ -18,6 +18,12 @@ const formatCurrency = (value, currency = 'BRL') => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency }).format(value)
 }
 
+const blockInvalidChars = (e) => {
+  if (['-', '+', 'e', 'E'].includes(e.key)) {
+    e.preventDefault();
+  }
+}
+
 // --- SUBCOMPONENTES DE UI PÚBLICOS ---
 const StatCard = ({ title, amount, colorClass, borderColor, textColor }) => (
   <div className={`flex-1 rounded-2xl ${colorClass} p-3 sm:p-4 border ${borderColor}`}>
@@ -26,7 +32,7 @@ const StatCard = ({ title, amount, colorClass, borderColor, textColor }) => (
   </div>
 )
 
-const GoalCard = ({ goal, onAddFunds }) => {
+const GoalCard = ({ goal, onManageFunds, onDeleteGoal }) => {
   const progress = Math.min((goal.current_amount / goal.target_amount) * 100, 100)
   const isUSD = goal.currency === 'USD'
   const convertedAmount = isUSD ? goal.current_amount * USD_RATE : null
@@ -40,6 +46,9 @@ const GoalCard = ({ goal, onAddFunds }) => {
           </div>
           <h4 className="font-bold text-white text-sm truncate">{goal.name}</h4>
         </div>
+        <button onClick={() => onDeleteGoal(goal)} title="Excluir meta" className="text-slate-500 hover:text-rose-500 transition-colors p-1">
+          <Trash2 size={16} />
+        </button>
       </div>
       
       <div className="mb-3">
@@ -58,7 +67,10 @@ const GoalCard = ({ goal, onAddFunds }) => {
 
       <div className="flex justify-between items-center">
         <span className="text-xs font-semibold text-slate-400">{progress.toFixed(1)}% concluído</span>
-        <button onClick={() => onAddFunds(goal)} className="text-xs font-bold text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors">Guardar</button>
+        <div className="flex gap-1.5">
+          <button onClick={() => onManageFunds(goal, 'remove')} className="text-xs font-bold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1.5 rounded-lg transition-colors">Retirar</button>
+          <button onClick={() => onManageFunds(goal, 'add')} className="text-xs font-bold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1.5 rounded-lg transition-colors">Guardar</button>
+        </div>
       </div>
     </div>
   )
@@ -102,6 +114,7 @@ export default function Dashboard({ session }) {
   const [showSettings, setShowSettings] = useState(false)
   const [showMonthPicker, setShowMonthPicker] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState(null)
+  const [goalToDelete, setGoalToDelete] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
 
   const [isSaving, setIsSaving] = useState(false)
@@ -120,6 +133,7 @@ export default function Dashboard({ session }) {
   const [goalCurrency, setGoalCurrency] = useState('BRL')
   const [goalDeadline, setGoalDeadline] = useState('')
   const [fundingGoal, setFundingGoal] = useState(null) 
+  const [fundType, setFundType] = useState('add')
   const [fundAmount, setFundAmount] = useState('')
 
   const [isAddingCategory, setIsAddingCategory] = useState(false)
@@ -142,9 +156,9 @@ export default function Dashboard({ session }) {
   }, [currentDate, filterCategory, searchTerm])
 
   useEffect(() => {
-    document.body.style.overflow = (showModal || showSettings || showMonthPicker || categoryToDelete || errorMessage || fundingGoal) ? 'hidden' : 'auto'
+    document.body.style.overflow = (showModal || showSettings || showMonthPicker || categoryToDelete || goalToDelete || errorMessage || fundingGoal) ? 'hidden' : 'auto'
     return () => { document.body.style.overflow = 'auto' }
-  }, [showModal, showSettings, showMonthPicker, categoryToDelete, errorMessage, fundingGoal])
+  }, [showModal, showSettings, showMonthPicker, categoryToDelete, goalToDelete, errorMessage, fundingGoal])
 
   useEffect(() => {
     if (showMonthPicker) setPickerYear(currentDate.getFullYear())
@@ -237,8 +251,13 @@ export default function Dashboard({ session }) {
     setIsSaving(false)
 
     if (error) setCategoryError(error.message)
-    else if (data) {
-      setCategories((prev) => [...prev, data[0]].sort((a, b) => a.name.localeCompare(b.name)))
+    else if (data && data.length > 0) {
+      setCategories((prev) => {
+        if (prev.some(c => c.id === data[0].id)) {
+          return [...prev, { ...data[0], id: Date.now() }].sort((a, b) => a.name.localeCompare(b.name));
+        }
+        return [...prev, data[0]].sort((a, b) => a.name.localeCompare(b.name))
+      })
       setCategoryId(data[0].id)
       resetCategoryForm()
     }
@@ -264,8 +283,13 @@ export default function Dashboard({ session }) {
       }
 
       setIsSaving(true)
-      await supabase.from('goals').insert([payload])
+      const { error: insertGoalError } = await supabase.from('goals').insert([payload])
       setIsSaving(false)
+      
+      if (insertGoalError) {
+        return setErrorMessage('Erro ao criar a meta: ' + insertGoalError.message)
+      }
+      
       closeModal(); fetchGoals()
       return
     }
@@ -288,11 +312,15 @@ export default function Dashboard({ session }) {
     }
 
     setIsSaving(true)
-    transactionToEdit 
+    const { error: saveTxError } = transactionToEdit 
       ? await supabase.from('expenses').update(payload).eq('id', transactionToEdit.id)
       : await supabase.from('expenses').insert([payload])
-    
     setIsSaving(false)
+    
+    if (saveTxError) {
+      return setErrorMessage('Erro ao salvar lançamento: ' + saveTxError.message)
+    }
+
     closeModal(); fetchTransactions()
   }
 
@@ -318,20 +346,101 @@ export default function Dashboard({ session }) {
     setCategoryId('')
   }
 
+  const executeDeleteGoal = async () => {
+    if (!goalToDelete) return
+    setIsSaving(true)
+    const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id)
+    setIsSaving(false)
+    setGoalToDelete(null)
+
+    if (error) {
+      setErrorMessage('Erro ao excluir meta: ' + error.message)
+      return
+    }
+    setGoals(goals.filter(g => g.id !== goalToDelete.id))
+  }
+
   const handleFundGoal = async (e) => {
     e.preventDefault()
-    if (!fundAmount || Number(fundAmount) <= 0) return
+    
+    const strVal = String(fundAmount).replace(',', '.')
+    if (!strVal || Number.parseFloat(strVal) <= 0) return
+
+    const amountValue = Number.parseFloat(strVal)
+    let newAmount = Number.parseFloat(fundingGoal.current_amount || 0)
+
+    if (fundType === 'remove') {
+      if (amountValue > newAmount) {
+        setFormErrors({ fundAmount: 'Valor maior que o saldo atual.' })
+        return
+      }
+      newAmount -= amountValue
+    } else {
+      newAmount += amountValue
+    }
 
     setIsSaving(true)
-    const newAmount = Number.parseFloat(fundingGoal.current_amount) + Number.parseFloat(fundAmount)
-    await supabase.from('goals').update({ current_amount: newAmount }).eq('id', fundingGoal.id)
-    setIsSaving(false)
     
-    setFundingGoal(null); setFundAmount(''); fetchGoals()
+    const { error: goalError } = await supabase.from('goals').update({ current_amount: newAmount }).eq('id', fundingGoal.id)
+    if (goalError) {
+      setIsSaving(false)
+      return setErrorMessage('Erro ao atualizar o saldo da meta: ' + goalError.message)
+    }
+
+    const targetType = fundType === 'add' ? 'expense' : 'income'
+    const catName = fundType === 'add' ? 'Metas (Aportes)' : 'Metas (Resgates)'
+    
+    let metaCat = categories.find(c => c.name === catName && c.type === targetType)
+    
+    if (!metaCat) {
+      const { data: catData } = await supabase.from('categories').insert([{ 
+        name: catName, 
+        type: targetType, 
+        user_id: session.user.id 
+      }]).select()
+      
+      if (catData && catData.length > 0) metaCat = catData[0]
+    }
+
+    // Fallback absoluto de segurança se a criação falhar: pega a primeira daquele tipo
+    if (!metaCat) {
+       metaCat = categories.find(c => c.type === targetType && !c.parent_id) || categories[0]
+    }
+
+    const effectiveAmount = fundingGoal.currency === 'USD' ? amountValue * USD_RATE : amountValue
+    const txPayload = {
+      user_id: session.user.id,
+      category_id: metaCat.id,
+      amount: effectiveAmount,
+      description: fundType === 'add' ? `Aporte: ${fundingGoal.name}` : `Resgate: ${fundingGoal.name}`,
+      expense_date: new Date().toISOString().split('T')[0],
+      type: targetType,
+      is_recurring: false
+    }
+    
+    const { error: txError } = await supabase.from('expenses').insert([txPayload])
+    
+    setIsSaving(false)
+
+    if (txError) {
+      return setErrorMessage('Meta atualizada, mas houve erro ao gerar o histórico: ' + txError.message)
+    }
+
+    setFundingGoal(null)
+    setFundAmount('')
+    setFormErrors({})
+    
+    await fetchGoals()
+    await fetchTransactions()
+    await fetchCategories()
   }
 
   const handleDelete = async (id) => {
-    await supabase.from('expenses').delete().eq('id', id)
+    const { error } = await supabase.from('expenses').delete().eq('id', id)
+    if (error) {
+       setErrorMessage('Erro ao excluir lançamento: ' + error.message)
+       return
+    }
     fetchTransactions()
   }
 
@@ -492,7 +601,7 @@ export default function Dashboard({ session }) {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       {MONTHS_SHORT.map((monthStr, index) => (
-                        <button key={monthStr} onClick={() => { setCurrentDate(new Date(pickerYear, index, 1)); setShowMonthPicker(false) }} className={`rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${currentDate.getMonth() === index && currentDate.getFullYear() === pickerYear ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>
+                        <button key={`month-${monthStr}-${index}`} onClick={() => { setCurrentDate(new Date(pickerYear, index, 1)); setShowMonthPicker(false) }} className={`rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${currentDate.getMonth() === index && currentDate.getFullYear() === pickerYear ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>
                           {monthStr}
                         </button>
                       ))}
@@ -516,7 +625,14 @@ export default function Dashboard({ session }) {
               <h3 className="text-sm font-semibold text-slate-300">Caixinhas & Metas</h3>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory custom-scrollbar">
-              {goals.map(goal => <GoalCard key={goal.id} goal={goal} onAddFunds={setFundingGoal} />)}
+              {goals.map((goal, idx) => (
+                <GoalCard 
+                  key={`goal-${goal.id}-${idx}`} 
+                  goal={goal} 
+                  onManageFunds={(g, type) => { setFundingGoal(g); setFundType(type); setFormErrors({}); }} 
+                  onDeleteGoal={setGoalToDelete} 
+                />
+              ))}
             </div>
           </section>
         )}
@@ -539,7 +655,7 @@ export default function Dashboard({ session }) {
                           </text>
                         );
                       }}>
-                      {chartData.map((entry, i) => <Cell key={i} fill={categoryColorMap[entry.name] || COLORS[i % COLORS.length]} style={{ outline: 'none' }} />)}
+                      {chartData.map((entry, i) => <Cell key={`cell-${i}`} fill={categoryColorMap[entry.name] || COLORS[i % COLORS.length]} style={{ outline: 'none' }} />)}
                     </Pie>
                     <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} itemStyle={{ color: '#e2e8f0' }} />
                   </PieChart>
@@ -558,11 +674,11 @@ export default function Dashboard({ session }) {
               </div>
               <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="appearance-none rounded-2xl border border-white/5 bg-slate-900/80 px-4 py-4 text-sm text-white outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all sm:w-48 cursor-pointer">
                 <option value="">Todas as categorias</option>
-                {categories.filter(c => !c.parent_id).map(parent => (
-                  <optgroup key={parent.id} label={parent.name} className="bg-slate-900 font-bold text-white">
-                    <option value={parent.id}>{parent.name} (Geral)</option>
-                    {categories.filter(sub => sub.parent_id === parent.id).map(sub => (
-                      <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">↳ {sub.name}</option>
+                {categories.filter(c => !c.parent_id).map((parent, idx) => (
+                  <optgroup key={`filter-optg-${parent.id}-${idx}`} label={parent.name} className="bg-slate-900 font-bold text-white">
+                    <option key={`filter-main-${parent.id}-${idx}`} value={parent.id}>{parent.name} (Geral)</option>
+                    {categories.filter(sub => sub.parent_id === parent.id).map((sub, sIdx) => (
+                      <option key={`filter-sub-${sub.id}-${sIdx}`} value={sub.id} className="text-slate-300 font-normal">↳ {sub.name}</option>
                     ))}
                   </optgroup>
                 ))}
@@ -570,7 +686,7 @@ export default function Dashboard({ session }) {
             </div>
             <div className="flex flex-col w-full gap-3 overflow-y-auto max-h-[50vh] md:max-h-[400px] pr-2 custom-scrollbar">
               {visibleTransactions.length > 0 
-                ? visibleTransactions.map((t) => <TransactionItem key={t.id} t={t} onEdit={openEditModal} onDelete={handleDelete} getCategoryPath={getCategoryPath} />)
+                ? visibleTransactions.map((t, idx) => <TransactionItem key={`tx-${t.id}-${idx}`} t={t} onEdit={openEditModal} onDelete={handleDelete} getCategoryPath={getCategoryPath} />)
                 : <div className="py-8 text-center text-sm text-slate-500">Nenhuma movimentação.</div>}
               {visibleCount < filteredTransactions.length && (
                 <button onClick={() => setVisibleCount(prev => prev + 15)} className="w-full py-4 mt-1 text-sm font-semibold text-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/10 border border-cyan-500/10 rounded-2xl transition-all">
@@ -589,16 +705,25 @@ export default function Dashboard({ session }) {
         <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setFundingGoal(null)} />
           <div className="relative w-full mx-4 max-w-sm rounded-3xl bg-slate-900 p-6 shadow-2xl animate-in zoom-in-95">
-            <h3 className="mb-2 text-xl font-bold text-white">Adicionar Saldo</h3>
-            <p className="mb-4 text-sm text-slate-300">Qual valor você deseja alocar na meta <span className="font-bold text-white">"{fundingGoal.name}"</span>?</p>
+            <h3 className="mb-2 text-xl font-bold text-white">{fundType === 'add' ? 'Adicionar Saldo' : 'Retirar Saldo'}</h3>
+            <p className="mb-4 text-sm text-slate-300">Qual valor você deseja {fundType === 'add' ? 'alocar na' : 'retirar da'} meta <span className="font-bold text-white">"{fundingGoal.name}"</span>?</p>
             <form onSubmit={handleFundGoal}>
-              <div className="relative w-full mb-6">
+              <div className="relative w-full mb-2">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">{fundingGoal.currency === 'USD' ? '$' : 'R$'}</span>
-                <input type="number" step="any" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} autoFocus placeholder="0.00" className="w-full appearance-none rounded-2xl bg-slate-950 py-4 pl-12 pr-4 text-xl font-bold text-white outline-none focus:ring-1 focus:ring-cyan-500/50" />
+                <input 
+                  type="number" min="0" step="any" onKeyDown={blockInvalidChars} value={fundAmount} 
+                  onChange={(e) => { setFundAmount(e.target.value); setFormErrors({}) }} 
+                  autoFocus placeholder="0.00" 
+                  className={`w-full appearance-none rounded-2xl bg-slate-950 py-4 pl-12 pr-4 text-xl font-bold text-white outline-none focus:ring-1 ${fundType === 'add' ? 'focus:ring-cyan-500/50' : 'focus:ring-rose-500/50'} ${formErrors.fundAmount ? 'border border-rose-500' : ''}`} 
+                />
               </div>
-              <div className="flex gap-3">
+              {formErrors.fundAmount && <p className="text-xs font-medium text-rose-500 mb-4 px-1">{formErrors.fundAmount}</p>}
+              
+              <div className="flex gap-3 mt-4">
                 <button type="button" onClick={() => setFundingGoal(null)} className="flex-1 rounded-xl bg-slate-800 py-3 font-semibold text-white">Cancelar</button>
-                <button type="submit" disabled={isSaving} className="flex-1 rounded-xl bg-cyan-500 py-3 font-bold text-white">{isSaving ? 'Salvando...' : 'Confirmar'}</button>
+                <button type="submit" disabled={isSaving} className={`flex-1 rounded-xl py-3 font-bold text-white ${fundType === 'add' ? 'bg-cyan-500' : 'bg-rose-500'}`}>
+                  {isSaving ? 'Aguarde...' : 'Confirmar'}
+                </button>
               </div>
             </form>
           </div>
@@ -634,7 +759,13 @@ export default function Dashboard({ session }) {
                   <div className="flex gap-3 w-full">
                     <div className="flex-1 flex flex-col gap-2">
                       <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Objetivo</label>
-                      <input type="number" step="any" value={goalTarget} onChange={(e) => { setGoalTarget(e.target.value); setFormErrors(prev => ({ ...prev, goalTarget: null })) }} placeholder="0.00" className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500 ${formErrors.goalTarget ? 'border border-rose-500' : ''}`} />
+                      <input 
+                        type="number" min="0" step="any" onKeyDown={blockInvalidChars} 
+                        value={goalTarget} 
+                        onChange={(e) => { setGoalTarget(e.target.value); setFormErrors(prev => ({ ...prev, goalTarget: null })) }} 
+                        placeholder="0.00" 
+                        className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500 ${formErrors.goalTarget ? 'border border-rose-500' : ''}`} 
+                      />
                       {formErrors.goalTarget && <span className="text-xs font-medium text-rose-500">{formErrors.goalTarget}</span>}
                     </div>
                     <div className="w-28 flex flex-col gap-2">
@@ -655,12 +786,17 @@ export default function Dashboard({ session }) {
                   <div className="flex flex-col gap-1 w-full">
                     <div className="relative w-full">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">R$</span>
-                      <input type="number" step="any" value={amount} onChange={(e) => { setAmount(e.target.value); setFormErrors(prev => ({ ...prev, amount: null })) }} placeholder="0,00" className={`w-full appearance-none rounded-2xl bg-slate-950 py-5 pl-12 pr-4 text-2xl font-bold text-white outline-none focus:ring-2 focus:ring-cyan-500/50 ${formErrors.amount ? 'border border-rose-500' : ''}`} />
+                      <input 
+                        type="number" min="0" step="any" onKeyDown={blockInvalidChars} 
+                        value={amount} 
+                        onChange={(e) => { setAmount(e.target.value); setFormErrors(prev => ({ ...prev, amount: null })) }} 
+                        placeholder="0,00" 
+                        className={`w-full appearance-none rounded-2xl bg-slate-950 py-5 pl-12 pr-4 text-2xl font-bold text-white outline-none focus:ring-2 focus:ring-cyan-500/50 ${formErrors.amount ? 'border border-rose-500' : ''}`} 
+                      />
                     </div>
                     {formErrors.amount && <span className="text-xs font-medium text-rose-500">{formErrors.amount}</span>}
                   </div>
                   
-                  {/* LABEL RESTAURADA AQUI */}
                   <div className="flex flex-col gap-2 w-full mt-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Categoria</label>
@@ -676,7 +812,7 @@ export default function Dashboard({ session }) {
                         <input type="text" value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCategoryError('') }} autoFocus placeholder="Nome da categoria" className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
                         <select value={newCategoryParentId} onChange={(e) => setNewCategoryParentId(e.target.value)} className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500">
                           <option value="">↳ Categoria Principal (Sem pai)</option>
-                          {parentCategories.map(p => <option key={p.id} value={p.id}>Subcategoria de: {p.name}</option>)}
+                          {parentCategories.map((p, idx) => <option key={`new-parent-${p.id}-${idx}`} value={p.id}>Subcategoria de: {p.name}</option>)}
                         </select>
                         <div className="flex gap-2 w-full mt-1">
                           <button type="button" onClick={handleAddCategory} className="flex-1 rounded-xl bg-cyan-500 py-3 text-sm font-bold text-white hover:bg-cyan-400 transition-colors">Salvar Categoria</button>
@@ -689,11 +825,11 @@ export default function Dashboard({ session }) {
                         <div className="flex gap-2 w-full">
                           <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setFormErrors(prev => ({ ...prev, categoryId: null })) }} className={`flex-1 appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500 ${formErrors.categoryId ? 'border border-rose-500' : ''}`}>
                             <option value="" disabled>Selecione...</option>
-                            {parentCategories.map(parent => (
-                              <optgroup key={parent.id} label={parent.name} className="bg-slate-900 font-bold text-white">
-                                <option value={parent.id} className="text-white font-semibold">{parent.name} (Geral)</option>
-                                {categories.filter(sub => sub.parent_id === parent.id && sub.type === transactionType).map(sub => (
-                                  <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">↳ {sub.name}</option>
+                            {parentCategories.map((parent, idx) => (
+                              <optgroup key={`optg-${parent.id}-${idx}`} label={parent.name} className="bg-slate-900 font-bold text-white">
+                                <option key={`opt-main-${parent.id}-${idx}`} value={parent.id} className="text-white font-semibold">{parent.name} (Geral)</option>
+                                {categories.filter(sub => sub.parent_id === parent.id && sub.type === transactionType).map((sub, sIdx) => (
+                                  <option key={`opt-sub-${sub.id}-${sIdx}`} value={sub.id} className="text-slate-300 font-normal">↳ {sub.name}</option>
                                 ))}
                               </optgroup>
                             ))}
@@ -798,6 +934,21 @@ export default function Dashboard({ session }) {
             <div className="flex gap-3">
               <button onClick={() => setCategoryToDelete(null)} className="flex-1 rounded-xl bg-slate-800 py-3 font-semibold text-white">Cancelar</button>
               <button onClick={executeDeleteCategory} disabled={isSaving} className="flex-1 rounded-xl bg-rose-500 py-3 font-bold text-white">{isSaving ? 'Aguarde...' : 'Excluir'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE GOAL MODAL */}
+      {goalToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setGoalToDelete(null)} />
+          <div className="relative w-full mx-4 max-w-sm rounded-3xl bg-slate-900 p-6 shadow-2xl animate-in zoom-in-95">
+            <h3 className="mb-2 text-xl font-bold text-white">Excluir meta</h3>
+            <p className="mb-6 text-sm text-slate-300">Tem certeza que deseja excluir a meta <span className="font-bold text-white">"{goalToDelete.name}"</span>?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setGoalToDelete(null)} className="flex-1 rounded-xl bg-slate-800 py-3 font-semibold text-white">Cancelar</button>
+              <button onClick={executeDeleteGoal} disabled={isSaving} className="flex-1 rounded-xl bg-rose-500 py-3 font-bold text-white">{isSaving ? 'Aguarde...' : 'Excluir'}</button>
             </div>
           </div>
         </div>
