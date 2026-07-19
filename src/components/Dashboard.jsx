@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { LogOut, Plus, Trash2, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download } from 'lucide-react'
+import { LogOut, Plus, Trash2, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download, Lock } from 'lucide-react'
 
 const COLORS = ['#22c55e', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6']
 const MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -55,17 +55,14 @@ export default function Dashboard({ session }) {
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
-  // Trava de Scroll do Body
+  // Trava de Scroll do Body para Modais
   useEffect(() => {
     if (showModal || showSettings || showMonthPicker || categoryToDelete || errorMessage) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = 'auto'
     }
-
-    return () => {
-      document.body.style.overflow = 'auto'
-    }
+    return () => { document.body.style.overflow = 'auto' }
   }, [showModal, showSettings, showMonthPicker, categoryToDelete, errorMessage])
 
   useEffect(() => {
@@ -473,19 +470,20 @@ export default function Dashboard({ session }) {
               <h3 className="text-sm font-semibold text-slate-300 mb-6">Despesas por Categoria</h3>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
+                  {/* Modificado: margin adicionada para evitar corte, e labels divididas em 2 linhas */}
+                  <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
                     <Pie 
                       data={chartData} 
                       cx="50%" 
                       cy="50%" 
-                      innerRadius={50} 
-                      outerRadius={80} 
+                      innerRadius={45} 
+                      outerRadius={65} 
                       paddingAngle={2} 
                       dataKey="value"
                       labelLine={{ stroke: '#64748b', strokeWidth: 1 }}
                       label={({ cx, cy, midAngle, innerRadius, outerRadius, value, name }) => {
                         const RADIAN = Math.PI / 180;
-                        const radius = outerRadius + 20;
+                        const radius = outerRadius + 15;
                         const x = cx + radius * Math.cos(-midAngle * RADIAN);
                         const y = cy + radius * Math.sin(-midAngle * RADIAN);
                         
@@ -496,10 +494,11 @@ export default function Dashboard({ session }) {
                             fill="#cbd5e1" 
                             textAnchor={x > cx ? 'start' : 'end'} 
                             dominantBaseline="central"
-                            fontSize="12"
+                            fontSize="11"
                             fontWeight="500"
                           >
-                            {name}: {formatCurrency(value)}
+                            <tspan x={x} dy="-0.5em">{name}</tspan>
+                            <tspan x={x} dy="1.2em">{formatCurrency(value)}</tspan>
                           </text>
                         );
                       }}
