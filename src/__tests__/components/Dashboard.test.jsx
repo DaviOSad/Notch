@@ -8,7 +8,6 @@ const mockInsert = vi.fn(function() { return this })
 const mockDelete = vi.fn(function() { return this })
 const mockEq = vi.fn(function() { return this })
 
-// Alteramos a data dos Dummies para '2026-07-01' para que fiquem no fim da paginação
 const dummyTransactions = Array.from({ length: 14 }).map((_, i) => ({
   id: 101 + i, amount: 10, description: `Dummy ${i}`, expense_date: '2026-07-01',
   category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false
@@ -28,9 +27,9 @@ const createChainableMock = (table) => {
       if (table === 'categories') {
         resolve({ 
           data: [
-            { id: 1, name: 'Alimentação', type: 'expense' },
-            { id: 2, name: 'Transporte', type: 'expense' },
-            { id: 3, name: 'Serviços', type: 'expense' }
+            { id: 1, name: 'Alimentação', type: 'expense', parent_id: null },
+            { id: 2, name: 'Transporte', type: 'expense', parent_id: null },
+            { id: 3, name: 'Serviços', type: 'expense', parent_id: null }
           ], 
           error: null 
         })
@@ -75,7 +74,6 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
 
   it('deve processar e exibir transações recorrentes de datas passadas', async () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
-    // Agora que as datas dummy foram corrigidas, este item estará entre os primeiros renderizados
     expect(screen.getByText(/Internet Recorrente/i)).toBeInTheDocument()
   })
 
@@ -83,7 +81,6 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     const user = userEvent.setup()
     
     global.URL.createObjectURL = vi.fn()
-    // Interceptamos o clique nativo do navegador com segurança, sem quebrar o React
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
     await act(async () => { render(<Dashboard session={mockSession} />) })
@@ -110,7 +107,7 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(loadMoreBtn)
 
     const allEditButtons = screen.getAllByTitle('Editar')
-    expect(allEditButtons).toHaveLength(17) // 2 manuais + 1 recorrente + 14 dummy
+    expect(allEditButtons).toHaveLength(17) 
     expect(screen.queryByRole('button', { name: /Carregar mais lançamentos/i })).not.toBeInTheDocument()
   })
 
@@ -120,15 +117,15 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
 
     const filterSelect = screen.getAllByRole('combobox')[0]
 
-    await user.selectOptions(filterSelect, 'Alimentação')
+    await user.selectOptions(filterSelect, '1') // ID da Alimentação
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument() 
     expect(screen.queryByText(/Uber/i)).not.toBeInTheDocument()   
 
-    await user.selectOptions(filterSelect, 'Transporte')
+    await user.selectOptions(filterSelect, '2') // ID do Transporte
     expect(screen.queryByText(/Conta de Luz/i)).not.toBeInTheDocument() 
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()               
 
-    await user.selectOptions(filterSelect, 'Todas as categorias')
+    await user.selectOptions(filterSelect, '') // Limpa o filtro
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()
   })
@@ -185,19 +182,51 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     expect(mockEq).toHaveBeenCalledWith('id', 99)
   })
 
-  it('deve adicionar uma nova categoria com sucesso', async () => {
+  // --- NOVOS TESTES DE CATEGORIAS E SUBCATEGORIAS ---
+  it('deve adicionar uma nova categoria principal com sucesso', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    // Abre o modal de lançamento
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    
+    // Clica no botão de '+' ao lado do combobox de categorias
+    const categorySelect = document.querySelectorAll('select')[1]
+    const addCatBtn = categorySelect.nextElementSibling.querySelector('button')
+    await user.click(addCatBtn)
+    
+    // Preenche a categoria (Muda a tela para o modo de criação)
+    await user.type(await screen.findByPlaceholderText('Nome da categoria'), 'Lazer')
+    
+    // Confirma a criação garantindo que não selecionamos nenhum "pai"
+    await user.click(screen.getByRole('button', { name: 'Salvar Categoria' }))
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ name: 'Lazer', type: 'expense', parent_id: null })
+    ]))
+  })
+
+  it('deve adicionar uma nova subcategoria com sucesso', async () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
     await user.click(document.querySelector('button.fixed.bottom-6'))
     
-    const modalSelect = screen.getAllByRole('combobox')[1]
-    await user.selectOptions(modalSelect, 'new') 
+    const categorySelect = document.querySelectorAll('select')[1]
+    const addCatBtn = categorySelect.nextElementSibling.querySelector('button')
+    await user.click(addCatBtn)
     
-    await user.type(await screen.findByPlaceholderText('Nome da categoria'), 'Lazer')
-    await user.click(screen.getByRole('button', { name: 'Criar' }))
+    await user.type(await screen.findByPlaceholderText('Nome da categoria'), 'Lanches')
+    
+    // O segundo select agora é o dropdown de "Categoria Pai" na tela de criação
+    const parentSelect = document.querySelectorAll('select')[1]
+    await user.selectOptions(parentSelect, '1') // ID de "Alimentação"
+    
+    await user.click(screen.getByRole('button', { name: 'Salvar Categoria' }))
 
-    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ name: 'Lazer', type: 'expense' })]))
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ name: 'Lanches', type: 'expense', parent_id: '1' })
+    ]))
   })
 
   it('deve inserir um novo lançamento com sucesso', async () => {
@@ -207,14 +236,13 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(document.querySelector('button.fixed.bottom-6'))
     await user.type(screen.getByPlaceholderText('0,00'), '500')
 
-    const modalSelect = screen.getAllByRole('combobox')[1]
-    await user.selectOptions(modalSelect, 'Alimentação') 
+    const categorySelect = document.querySelectorAll('select')[1]
+    await user.selectOptions(categorySelect, '1') // Seleciona "Alimentação" pelo Value/ID
     
-    const selectedValue = modalSelect.value
     await user.click(screen.getByRole('button', { name: /Confirmar Lançamento/i }))
 
     expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ amount: 500, category_id: selectedValue, type: 'expense' })
+      expect.objectContaining({ amount: 500, category_id: '1', type: 'expense' })
     ]))
   })
 })

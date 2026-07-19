@@ -343,6 +343,21 @@ export default function Dashboard({ session }) {
   const totalExpense = transactions.filter(t => t.type === 'expense' || !t.type).reduce((sum, t) => sum + Number(t.amount), 0)
   const monthlyRemaining = totalIncome - totalExpense
 
+  // --- NOVA LÓGICA DE CORES FIXAS ---
+  // Cria um mapa garantindo que a mesma categoria sempre receba a mesma cor
+  const categoryColorMap = useMemo(() => {
+    const parentNames = Array.from(
+      new Set(categories.filter(c => !c.parent_id).map(c => c.name))
+    ).sort()
+    
+    const map = {}
+    parentNames.forEach((name, index) => {
+      map[name] = COLORS[index % COLORS.length]
+    })
+    map['Sem categoria'] = '#475569' // Cor fixa (cinza escuro) para lançamentos órfãos
+    return map
+  }, [categories])
+
   const chartData = useMemo(() => {
     const expensesByCategory = transactions.filter(t => t.type === 'expense' || !t.type).reduce((acc, expense) => {
       const parentName = getParentCategoryName(expense.category_id)
@@ -432,6 +447,7 @@ export default function Dashboard({ session }) {
         </section>
 
         <div className="grid w-full grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          {/* CHART SECTION */}
           {chartData.length > 0 && (
             <section className="w-full h-fit rounded-3xl bg-slate-900/50 border border-white/5 p-5">
               <h3 className="text-sm font-semibold text-slate-300 mb-6">Despesas Macro</h3>
@@ -448,7 +464,10 @@ export default function Dashboard({ session }) {
                           </text>
                         );
                       }}>
-                      {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} style={{ outline: 'none' }} />)}
+                      {/* Cor atualizada para usar o mapeamento fixo */}
+                      {chartData.map((entry, i) => (
+                        <Cell key={i} fill={categoryColorMap[entry.name] || COLORS[i % COLORS.length]} style={{ outline: 'none' }} />
+                      ))}
                     </Pie>
                     <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} itemStyle={{ color: '#e2e8f0' }} />
                   </PieChart>
@@ -457,6 +476,7 @@ export default function Dashboard({ session }) {
             </section>
           )}
 
+          {/* HISTORY SECTION */}
           <section className="w-full flex flex-col gap-4">
             <h3 className="text-lg font-bold text-white">Histórico</h3>
             
@@ -503,8 +523,10 @@ export default function Dashboard({ session }) {
         </div>
       </div>
 
+      {/* FAB BTN */}
       <button onClick={() => setShowModal(true)} className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 transition-transform active:scale-90 md:bottom-10 md:right-10"><Plus size={28} /></button>
 
+      {/* TRANSACTION MODAL */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeModal} />
@@ -611,6 +633,7 @@ export default function Dashboard({ session }) {
         </div>
       )}
 
+      {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeSettings} />
