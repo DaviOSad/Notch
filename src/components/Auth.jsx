@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-export default function Auth() {
+// --- CUSTOM HOOK PARA LÓGICA DE AUTENTICAÇÃO ---
+function useAuthLogic() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLogin, setIsLogin] = useState(true)
   const [isAnimating, setIsAnimating] = useState(false)
-  
-  // Estados para as mensagens de feedback
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
 
@@ -42,23 +41,31 @@ export default function Auth() {
   }
 
   const toggleMode = () => {
-    // 1. Inicia a animação de saída (fade out)
     setIsAnimating(true)
-    
-    // 2. Aguarda 300ms para a animação terminar antes de trocar os dados
     setTimeout(() => {
       setIsLogin(!isLogin)
       setErrorMessage('')
       setSuccessMessage('')
-      
-      // Limpa os campos de texto
       setEmail('')
       setPassword('')
-      
-      // 3. Retorna a opacidade para exibir o novo formulário (fade in)
       setIsAnimating(false)
     }, 300)
   }
+
+  return {
+    loading, email, setEmail, password, setPassword,
+    isLogin, isAnimating, errorMessage, successMessage,
+    handleAuth, toggleMode
+  }
+}
+
+// --- COMPONENTE VISUAL ---
+export default function Auth() {
+  const {
+    loading, email, setEmail, password, setPassword,
+    isLogin, isAnimating, errorMessage, successMessage,
+    handleAuth, toggleMode
+  } = useAuthLogic()
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0f172a] to-[#020617] p-4 font-sans antialiased text-slate-200">
@@ -71,7 +78,7 @@ export default function Auth() {
           </h3>
         </div>
 
-        {/* Área Animada (Títulos e Formulário) */}
+        {/* Área Animada */}
         <div className={`transition-all duration-300 transform ${isAnimating ? 'opacity-0 scale-95 translate-y-2' : 'opacity-100 scale-100 translate-y-0'}`}>
           <div className="text-center mb-8">
             <h2 className="text-3xl font-extrabold text-white mb-3">
@@ -104,10 +111,9 @@ export default function Auth() {
 
           <form onSubmit={handleAuth} className="space-y-6">
             <div>
-              {/* Adicionado htmlFor */}
               <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">Email</label>
               <input
-                id="email" // Adicionado ID correspondente
+                id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -117,10 +123,9 @@ export default function Auth() {
               />
             </div>
             <div>
-              {/* Adicionado htmlFor */}
               <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
               <input
-                id="password" // Adicionado ID correspondente
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -154,7 +159,6 @@ export default function Auth() {
             </span>
           </button>
         </div>
-
       </div>
     </div>
   )

@@ -20,5 +20,9 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  return <div className="min-h-screen">{session ? <Dashboard session={session} /> : <Auth />}</div>
+  return (
+    <div className="min-h-screen">
+      {session ? <Dashboard session={session} /> : <Auth />}
+    </div>
+  )
 }
