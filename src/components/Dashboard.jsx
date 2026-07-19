@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { LogOut, Plus, Trash2, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download, Lock } from 'lucide-react'
+import { LogOut, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download, Lock } from 'lucide-react'
 
 const COLORS = ['#22c55e', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6']
 const MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -21,6 +21,7 @@ export default function Dashboard({ session }) {
   // Modal states
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [transactionToEdit, setTransactionToEdit] = useState(null) // Novo estado para controlar a edição
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -208,8 +209,28 @@ export default function Dashboard({ session }) {
     setCategoryId('')
   }
 
+  const openEditModal = (t) => {
+    setTransactionToEdit(t)
+    setTransactionType(t.type || 'expense')
+    setAmount(t.amount.toString())
+    setCategoryId(t.category_id || '')
+    setDescription(t.description || '')
+    setIsRecurring(t.is_recurring || false)
+    
+    if (t.is_recurring) {
+      const day = t.expense_date.split('-')[2]
+      setRecurringDay(parseInt(day, 10))
+    } else {
+      setExpenseDate(t.expense_date)
+    }
+    
+    setFormErrors({})
+    setShowModal(true)
+  }
+
   const closeModal = () => {
     setShowModal(false)
+    setTransactionToEdit(null)
     setAmount('')
     setDescription('')
     setCategoryId('')
@@ -257,8 +278,7 @@ export default function Dashboard({ session }) {
       finalDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(recurringDay).padStart(2, '0')}`
     }
 
-    setIsSaving(true)
-    await supabase.from('expenses').insert([{
+    const payload = {
       user_id: session.user.id, 
       category_id: categoryId, 
       amount: Number.parseFloat(amount), 
@@ -266,7 +286,16 @@ export default function Dashboard({ session }) {
       expense_date: finalDate, 
       type: transactionType, 
       is_recurring: isRecurring
-    }])
+    }
+
+    setIsSaving(true)
+    
+    if (transactionToEdit) {
+      await supabase.from('expenses').update(payload).eq('id', transactionToEdit.id)
+    } else {
+      await supabase.from('expenses').insert([payload])
+    }
+    
     setIsSaving(false)
     closeModal()
     fetchTransactions()
@@ -470,7 +499,6 @@ export default function Dashboard({ session }) {
               <h3 className="text-sm font-semibold text-slate-300 mb-6">Despesas por Categoria</h3>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  {/* Modificado: margin adicionada para evitar corte, e labels divididas em 2 linhas */}
                   <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
                     <Pie 
                       data={chartData} 
@@ -546,11 +574,14 @@ export default function Dashboard({ session }) {
                         {t.is_recurring && <Repeat size={12} className="text-cyan-500/70 shrink-0 ml-1" />}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`text-base font-bold ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-100'}`}>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-base font-bold mr-1 ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-100'}`}>
                         {t.type === 'income' ? '+ ' : '- '}{formatCurrency(t.amount)}
                       </span>
-                      <button onClick={() => handleDelete(t.id)} className="text-slate-600 hover:text-rose-500 transition-colors p-1">
+                      <button onClick={() => openEditModal(t)} className="text-slate-600 hover:text-cyan-500 transition-colors p-1" title="Editar">
+                        <Pencil size={18} />
+                      </button>
+                      <button onClick={() => handleDelete(t.id)} className="text-slate-600 hover:text-rose-500 transition-colors p-1" title="Excluir">
                         <Trash2 size={18} />
                       </button>
                     </div>
@@ -580,7 +611,9 @@ export default function Dashboard({ session }) {
             
             <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-slate-700 md:hidden" />
 
-            <h2 className="text-xl font-bold text-white mb-6">Novo Lançamento</h2>
+            <h2 className="text-xl font-bold text-white mb-6">
+              {transactionToEdit ? 'Editar Lançamento' : 'Novo Lançamento'}
+            </h2>
 
             <form onSubmit={handleAddTransaction} noValidate className="flex flex-col gap-5 w-full">
               
@@ -679,7 +712,7 @@ export default function Dashboard({ session }) {
               </div>
 
               <button type="submit" disabled={isSaving} className="mt-4 w-full rounded-2xl bg-cyan-500 py-4 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50">
-                {isSaving ? 'Salvando...' : 'Confirmar Lançamento'}
+                {isSaving ? 'Salvando...' : (transactionToEdit ? 'Salvar Alterações' : 'Confirmar Lançamento')}
               </button>
             </form>
           </div>
