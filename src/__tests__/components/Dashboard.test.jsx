@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Dashboard from '../../components/Dashboard'
 import { vi } from 'vitest'
@@ -36,12 +36,20 @@ const createChainableMock = (table) => {
       } else if (table === 'expenses') {
         resolve({ 
           data: [
-            { id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false },
-            { id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', category_id: 2, categories: { name: 'Transporte' }, type: 'expense', is_recurring: false },
-            { id: 500, amount: 120.00, description: 'Internet Recorrente', expense_date: '2025-01-05', category_id: 3, categories: { name: 'Serviços' }, type: 'expense', is_recurring: true },
+            { id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', category_id: 1, type: 'expense', is_recurring: false },
+            { id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', category_id: 2, type: 'expense', is_recurring: false },
+            { id: 500, amount: 120.00, description: 'Internet Recorrente', expense_date: '2025-01-05', category_id: 3, type: 'expense', is_recurring: true },
             ...dummyTransactions
           ], 
           error: null 
+        })
+      } else if (table === 'goals') {
+        resolve({
+          data: [
+            { id: 1, name: 'Viagem EUA - Hardware', target_amount: 3000, current_amount: 500, currency: 'USD', deadline: '2026-08-15' },
+            { id: 2, name: 'Reserva de Emergência', target_amount: 10000, current_amount: 2000, currency: 'BRL', deadline: null }
+          ],
+          error: null
         })
       } else {
         resolve({ data: [], error: null })
@@ -65,7 +73,6 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
 
   it('deve renderizar a tela inicial com dados mockados', async () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
-    
     expect(screen.getByText('Nexo')).toBeInTheDocument()
     expect(screen.getByText('Resumo do Mês')).toBeInTheDocument()
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
@@ -75,23 +82,6 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
   it('deve processar e exibir transações recorrentes de datas passadas', async () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
     expect(screen.getByText(/Internet Recorrente/i)).toBeInTheDocument()
-  })
-
-  it('deve realizar a exportação dos dados para CSV', async () => {
-    const user = userEvent.setup()
-    
-    global.URL.createObjectURL = vi.fn()
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    await act(async () => { render(<Dashboard session={mockSession} />) })
-
-    await user.click(document.querySelector('header button:first-of-type'))
-    await user.click(screen.getByRole('button', { name: /Exportar Lançamentos/i }))
-
-    expect(global.URL.createObjectURL).toHaveBeenCalled()
-    expect(clickSpy).toHaveBeenCalled()
-    
-    clickSpy.mockRestore()
   })
 
   it('deve exibir no máximo 15 lançamentos e permitir carregar mais', async () => {
@@ -117,17 +107,59 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
 
     const filterSelect = screen.getAllByRole('combobox')[0]
 
-    await user.selectOptions(filterSelect, '1') // ID da Alimentação
+    await user.selectOptions(filterSelect, '1') 
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument() 
     expect(screen.queryByText(/Uber/i)).not.toBeInTheDocument()   
 
-    await user.selectOptions(filterSelect, '2') // ID do Transporte
+    await user.selectOptions(filterSelect, '2') 
     expect(screen.queryByText(/Conta de Luz/i)).not.toBeInTheDocument() 
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()               
 
-    await user.selectOptions(filterSelect, '') // Limpa o filtro
+    await user.selectOptions(filterSelect, '') 
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
     expect(screen.getByText(/Uber/i)).toBeInTheDocument()
+  })
+
+  it('deve renderizar a seção de metas com conversão de moedas', async () => {
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+    expect(screen.getByText('Caixinhas & Metas')).toBeInTheDocument()
+    expect(screen.getByText('Viagem EUA - Hardware')).toBeInTheDocument()
+    expect(screen.getByText('~ R$ 2.725,00')).toBeInTheDocument()
+    expect(screen.getByText('Reserva de Emergência')).toBeInTheDocument()
+  })
+
+  it('deve adicionar uma nova meta em dólar com sucesso', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    expect(await screen.findByText('Novo Lançamento')).toBeInTheDocument()
+    
+    await user.click(screen.getByRole('button', { name: 'Meta' }))
+    
+    await user.type(screen.getByPlaceholderText('Ex: Viagem EUA - Agosto'), 'PC Novo')
+    await user.type(screen.getByPlaceholderText('0.00'), '1500')
+    
+    const currencySelect = screen.getAllByRole('combobox')[1] 
+    await user.selectOptions(currencySelect, 'USD')
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ name: 'PC Novo', target_amount: 1500, currency: 'USD' })
+    ]))
+  })
+
+  it('deve falhar a validação se a meta não tiver nome ou objetivo', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    await user.click(screen.getByRole('button', { name: 'Meta' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(await screen.findByText('Preencha o nome da meta.')).toBeInTheDocument()
+    expect(await screen.findByText('Preencha um objetivo maior que zero.')).toBeInTheDocument()
   })
 
   it('deve validar formulário de novo lançamento (vazio)', async () => {
@@ -135,7 +167,7 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
     await user.click(document.querySelector('button.fixed.bottom-6'))
-    await user.click(screen.getByRole('button', { name: /Confirmar Lançamento/i }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
 
     expect(await screen.findByText('Preencha um valor maior que zero.')).toBeInTheDocument()
     expect(await screen.findByText('Selecione uma categoria.')).toBeInTheDocument()
@@ -182,23 +214,33 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     expect(mockEq).toHaveBeenCalledWith('id', 99)
   })
 
-  // --- NOVOS TESTES DE CATEGORIAS E SUBCATEGORIAS ---
+  it('deve realizar a exportação dos dados para CSV', async () => {
+    const user = userEvent.setup()
+    global.URL.createObjectURL = vi.fn()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('header button:first-of-type'))
+    await user.click(screen.getByRole('button', { name: /Exportar Lançamentos/i }))
+
+    expect(global.URL.createObjectURL).toHaveBeenCalled()
+    expect(clickSpy).toHaveBeenCalled()
+    clickSpy.mockRestore()
+  })
+
   it('deve adicionar uma nova categoria principal com sucesso', async () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    // Abre o modal de lançamento
     await user.click(document.querySelector('button.fixed.bottom-6'))
+    expect(await screen.findByText('Novo Lançamento')).toBeInTheDocument()
     
-    // Clica no botão de '+' ao lado do combobox de categorias
-    const categorySelect = document.querySelectorAll('select')[1]
-    const addCatBtn = categorySelect.nextElementSibling.querySelector('button')
+    const addCatBtn = screen.getByTestId('add-category-btn')
     await user.click(addCatBtn)
     
-    // Preenche a categoria (Muda a tela para o modo de criação)
-    await user.type(await screen.findByPlaceholderText('Nome da categoria'), 'Lazer')
-    
-    // Confirma a criação garantindo que não selecionamos nenhum "pai"
+    const input = await screen.findByPlaceholderText('Nome da categoria')
+    await user.type(input, 'Lazer')
     await user.click(screen.getByRole('button', { name: 'Salvar Categoria' }))
 
     expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
@@ -211,16 +253,18 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
     await user.click(document.querySelector('button.fixed.bottom-6'))
+    expect(await screen.findByText('Novo Lançamento')).toBeInTheDocument()
     
-    const categorySelect = document.querySelectorAll('select')[1]
-    const addCatBtn = categorySelect.nextElementSibling.querySelector('button')
+    const addCatBtn = screen.getByTestId('add-category-btn')
     await user.click(addCatBtn)
     
-    await user.type(await screen.findByPlaceholderText('Nome da categoria'), 'Lanches')
+    const input = await screen.findByPlaceholderText('Nome da categoria')
+    await user.type(input, 'Lanches')
     
-    // O segundo select agora é o dropdown de "Categoria Pai" na tela de criação
-    const parentSelect = document.querySelectorAll('select')[1]
-    await user.selectOptions(parentSelect, '1') // ID de "Alimentação"
+    const parentSelects = screen.getAllByRole('combobox')
+    
+    // CORREÇÃO MÁGICA: Usando fireEvent direto na tag <select> para forçar a mudança do estado no React
+    fireEvent.change(parentSelects[1], { target: { value: '1' } })
     
     await user.click(screen.getByRole('button', { name: 'Salvar Categoria' }))
 
@@ -236,10 +280,12 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(document.querySelector('button.fixed.bottom-6'))
     await user.type(screen.getByPlaceholderText('0,00'), '500')
 
-    const categorySelect = document.querySelectorAll('select')[1]
-    await user.selectOptions(categorySelect, '1') // Seleciona "Alimentação" pelo Value/ID
+    const selects = screen.getAllByRole('combobox')
     
-    await user.click(screen.getByRole('button', { name: /Confirmar Lançamento/i }))
+    // Forçando a seleção de "Alimentação" também com fireEvent por segurança e consistência
+    fireEvent.change(selects[1], { target: { value: '1' } })
+    
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
 
     expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({ amount: 500, category_id: '1', type: 'expense' })

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { LogOut, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download, CornerDownRight } from 'lucide-react'
+import { LogOut, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download, CornerDownRight, Target, Globe } from 'lucide-react'
 
 // --- CONSTANTES & HELPERS ---
 const COLORS = ['#22c55e', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#ec4899', '#3b82f6']
 const MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const USD_RATE = 5.45
 
 const getMonthBounds = (date) => {
   const startDate = new Date(date.getFullYear(), date.getMonth(), 1)
@@ -13,7 +14,9 @@ const getMonthBounds = (date) => {
   return { startDate: startDate.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0] }
 }
 
-const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+const formatCurrency = (value, currency = 'BRL') => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency }).format(value)
+}
 
 // --- SUBCOMPONENTES DE UI PÚBLICOS ---
 const StatCard = ({ title, amount, colorClass, borderColor, textColor }) => (
@@ -22,6 +25,44 @@ const StatCard = ({ title, amount, colorClass, borderColor, textColor }) => (
     <p className={`text-sm sm:text-lg font-bold ${textColor} truncate`}>{formatCurrency(amount)}</p>
   </div>
 )
+
+const GoalCard = ({ goal, onAddFunds }) => {
+  const progress = Math.min((goal.current_amount / goal.target_amount) * 100, 100)
+  const isUSD = goal.currency === 'USD'
+  const convertedAmount = isUSD ? goal.current_amount * USD_RATE : null
+
+  return (
+    <div className="flex-none w-64 rounded-3xl bg-slate-900/60 border border-white/5 p-5 snap-start relative overflow-hidden group">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-2">
+          <div className={`p-2 rounded-xl ${isUSD ? 'bg-indigo-500/20 text-indigo-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+            {isUSD ? <Globe size={16} /> : <Target size={16} />}
+          </div>
+          <h4 className="font-bold text-white text-sm truncate">{goal.name}</h4>
+        </div>
+      </div>
+      
+      <div className="mb-3">
+        <p className="text-xl font-bold text-white">{formatCurrency(goal.current_amount, goal.currency)}</p>
+        <p className="text-xs text-slate-500 mt-0.5">de {formatCurrency(goal.target_amount, goal.currency)}</p>
+        {isUSD && (
+          <p className="text-xs font-medium text-indigo-400 mt-1 bg-indigo-500/10 inline-block px-2 py-0.5 rounded-md">
+            ~ {formatCurrency(convertedAmount, 'BRL')}
+          </p>
+        )}
+      </div>
+
+      <div className="w-full bg-slate-800 rounded-full h-2 mb-4">
+        <div className={`h-2 rounded-full transition-all duration-1000 ${isUSD ? 'bg-indigo-500' : 'bg-cyan-500'}`} style={{ width: `${progress}%` }} />
+      </div>
+
+      <div className="flex justify-between items-center">
+        <span className="text-xs font-semibold text-slate-400">{progress.toFixed(1)}% concluído</span>
+        <button onClick={() => onAddFunds(goal)} className="text-xs font-bold text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors">Guardar</button>
+      </div>
+    </div>
+  )
+}
 
 const TransactionItem = ({ t, onEdit, onDelete, getCategoryPath }) => (
   <div className="group flex w-full items-center justify-between rounded-2xl bg-slate-900/40 p-4 transition-colors hover:bg-slate-900/80 border border-white/5">
@@ -41,12 +82,8 @@ const TransactionItem = ({ t, onEdit, onDelete, getCategoryPath }) => (
       <span className={`text-base font-bold mr-1 ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-100'}`}>
         {t.type === 'income' ? '+ ' : '- '}{formatCurrency(t.amount)}
       </span>
-      <button onClick={() => onEdit(t)} className="text-slate-600 hover:text-cyan-500 transition-colors p-1" title="Editar">
-        <Pencil size={18} />
-      </button>
-      <button onClick={() => onDelete(t.id)} className="text-slate-600 hover:text-rose-500 transition-colors p-1" title="Excluir">
-        <Trash2 size={18} />
-      </button>
+      <button onClick={() => onEdit(t)} className="text-slate-600 hover:text-cyan-500 transition-colors p-1" title="Editar"><Pencil size={18} /></button>
+      <button onClick={() => onDelete(t.id)} className="text-slate-600 hover:text-rose-500 transition-colors p-1" title="Excluir"><Trash2 size={18} /></button>
     </div>
   </div>
 )
@@ -55,6 +92,7 @@ const TransactionItem = ({ t, onEdit, onDelete, getCategoryPath }) => (
 export default function Dashboard({ session }) {
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
+  const [goals, setGoals] = useState([])
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
@@ -67,15 +105,23 @@ export default function Dashboard({ session }) {
   const [errorMessage, setErrorMessage] = useState('')
 
   const [isSaving, setIsSaving] = useState(false)
+  const [transactionType, setTransactionType] = useState('expense') 
+  
   const [transactionToEdit, setTransactionToEdit] = useState(null)
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [transactionType, setTransactionType] = useState('expense')
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringDay, setRecurringDay] = useState(() => new Date().getDate())
   
+  const [goalName, setGoalName] = useState('')
+  const [goalTarget, setGoalTarget] = useState('')
+  const [goalCurrency, setGoalCurrency] = useState('BRL')
+  const [goalDeadline, setGoalDeadline] = useState('')
+  const [fundingGoal, setFundingGoal] = useState(null) 
+  const [fundAmount, setFundAmount] = useState('')
+
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryParentId, setNewCategoryParentId] = useState('')
@@ -96,18 +142,28 @@ export default function Dashboard({ session }) {
   }, [currentDate, filterCategory, searchTerm])
 
   useEffect(() => {
-    document.body.style.overflow = (showModal || showSettings || showMonthPicker || categoryToDelete || errorMessage) ? 'hidden' : 'auto'
+    document.body.style.overflow = (showModal || showSettings || showMonthPicker || categoryToDelete || errorMessage || fundingGoal) ? 'hidden' : 'auto'
     return () => { document.body.style.overflow = 'auto' }
-  }, [showModal, showSettings, showMonthPicker, categoryToDelete, errorMessage])
+  }, [showModal, showSettings, showMonthPicker, categoryToDelete, errorMessage, fundingGoal])
 
   useEffect(() => {
     if (showMonthPicker) setPickerYear(currentDate.getFullYear())
   }, [showMonthPicker, currentDate])
 
   useEffect(() => {
-    if (session?.user?.id) { fetchCategories(); fetchTransactions() }
+    if (session?.user?.id) { 
+      fetchCategories() 
+      fetchTransactions()
+      fetchGoals()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate, session?.user?.id])
+
+  const fetchGoals = async () => {
+    const { data, error } = await supabase.from('goals').select('*').order('created_at', { ascending: false })
+    if (error) return console.error(error)
+    setGoals(data || [])
+  }
 
   const fetchCategories = async () => {
     const { data, error } = await supabase.from('categories').select('*').order('name', { ascending: true })
@@ -175,19 +231,13 @@ export default function Dashboard({ session }) {
     if (isDuplicate) return setCategoryError('Esta categoria já existe neste nível.')
 
     setIsSaving(true)
-    const payload = { 
-      name: trimmedName, 
-      user_id: session.user.id, 
-      type: transactionType,
-      parent_id: newCategoryParentId || null 
-    }
+    const payload = { name: trimmedName, user_id: session.user.id, type: transactionType, parent_id: newCategoryParentId || null }
     
     const { data, error } = await supabase.from('categories').insert([payload]).select()
     setIsSaving(false)
 
-    if (error) {
-      setCategoryError(error.message)
-    } else if (data) {
+    if (error) setCategoryError(error.message)
+    else if (data) {
       setCategories((prev) => [...prev, data[0]].sort((a, b) => a.name.localeCompare(b.name)))
       setCategoryId(data[0].id)
       resetCategoryForm()
@@ -195,39 +245,31 @@ export default function Dashboard({ session }) {
   }
 
   const resetCategoryForm = () => {
-    setIsAddingCategory(false)
-    setNewCategoryName('')
-    setNewCategoryParentId('')
-    setCategoryError('')
-    setFormErrors(prev => ({ ...prev, categoryId: null }))
+    setIsAddingCategory(false); setNewCategoryName(''); setNewCategoryParentId(''); setCategoryError(''); setFormErrors(prev => ({ ...prev, categoryId: null }))
   }
 
-  const executeDeleteCategory = async () => {
-    if (!categoryToDelete) return
-    
-    const hasChildren = categories.some(c => c.parent_id === categoryToDelete.id)
-    if (hasChildren) {
-      setErrorMessage('Não é possível excluir esta categoria porque ela possui subcategorias vinculadas.')
-      setCategoryToDelete(null)
-      return
-    }
-
-    setIsSaving(true)
-    const { error } = await supabase.from('categories').delete().eq('id', categoryToDelete.id)
-    setIsSaving(false)
-    setCategoryToDelete(null)
-
-    if (error) {
-      setErrorMessage(error.code === '23503' ? 'Não é possível excluir esta categoria pois há lançamentos associados a ela.' : 'Erro ao excluir categoria: ' + error.message)
-      return
-    }
-    setCategories(categories.filter(c => c.id !== categoryToDelete.id))
-    setCategoryId('')
-  }
-
-  const handleAddTransaction = async (e) => {
+  const handleSaveItem = async (e) => {
     e.preventDefault()
     const errors = {}
+
+    if (transactionType === 'goal') {
+      if (!goalName.trim()) errors.goalName = 'Preencha o nome da meta.'
+      if (!goalTarget || Number(goalTarget) <= 0) errors.goalTarget = 'Preencha um objetivo maior que zero.'
+      
+      if (Object.keys(errors).length > 0) return setFormErrors(errors)
+      setFormErrors({})
+
+      const payload = {
+        user_id: session.user.id, name: goalName.trim(), target_amount: Number.parseFloat(goalTarget), currency: goalCurrency, deadline: goalDeadline || null
+      }
+
+      setIsSaving(true)
+      await supabase.from('goals').insert([payload])
+      setIsSaving(false)
+      closeModal(); fetchGoals()
+      return
+    }
+
     if (!amount || Number(amount) <= 0) errors.amount = 'Preencha um valor maior que zero.'
     if (!isAddingCategory && !categoryId) errors.categoryId = 'Selecione uma categoria.'
     if (isRecurring && (!recurringDay || recurringDay < 1 || recurringDay > 31)) errors.date = 'Preencha um dia válido (1 a 31).'
@@ -251,8 +293,41 @@ export default function Dashboard({ session }) {
       : await supabase.from('expenses').insert([payload])
     
     setIsSaving(false)
-    closeModal()
-    fetchTransactions()
+    closeModal(); fetchTransactions()
+  }
+
+  const executeDeleteCategory = async () => {
+    if (!categoryToDelete) return
+    const hasChildren = categories.some(c => c.parent_id === categoryToDelete.id)
+    if (hasChildren) {
+      setErrorMessage('Não é possível excluir esta categoria porque ela possui subcategorias vinculadas.')
+      setCategoryToDelete(null)
+      return
+    }
+
+    setIsSaving(true)
+    const { error } = await supabase.from('categories').delete().eq('id', categoryToDelete.id)
+    setIsSaving(false)
+    setCategoryToDelete(null)
+
+    if (error) {
+      setErrorMessage(error.code === '23503' ? 'Não é possível excluir esta categoria pois há lançamentos associados a ela.' : 'Erro ao excluir categoria: ' + error.message)
+      return
+    }
+    setCategories(categories.filter(c => c.id !== categoryToDelete.id))
+    setCategoryId('')
+  }
+
+  const handleFundGoal = async (e) => {
+    e.preventDefault()
+    if (!fundAmount || Number(fundAmount) <= 0) return
+
+    setIsSaving(true)
+    const newAmount = Number.parseFloat(fundingGoal.current_amount) + Number.parseFloat(fundAmount)
+    await supabase.from('goals').update({ current_amount: newAmount }).eq('id', fundingGoal.id)
+    setIsSaving(false)
+    
+    setFundingGoal(null); setFundAmount(''); fetchGoals()
   }
 
   const handleDelete = async (id) => {
@@ -333,6 +408,7 @@ export default function Dashboard({ session }) {
     setShowModal(false); setTransactionToEdit(null); setAmount(''); setDescription(''); setCategoryId('')
     resetCategoryForm(); setErrorMessage(''); setFormErrors({})
     setTransactionType('expense'); setIsRecurring(false); setRecurringDay(new Date().getDate())
+    setGoalName(''); setGoalTarget(''); setGoalCurrency('BRL'); setGoalDeadline('')
   }
 
   const closeSettings = () => {
@@ -343,18 +419,14 @@ export default function Dashboard({ session }) {
   const totalExpense = transactions.filter(t => t.type === 'expense' || !t.type).reduce((sum, t) => sum + Number(t.amount), 0)
   const monthlyRemaining = totalIncome - totalExpense
 
-  // --- NOVA LÓGICA DE CORES FIXAS ---
-  // Cria um mapa garantindo que a mesma categoria sempre receba a mesma cor
   const categoryColorMap = useMemo(() => {
     const parentNames = Array.from(
       new Set(categories.filter(c => !c.parent_id).map(c => c.name))
     ).sort()
     
     const map = {}
-    parentNames.forEach((name, index) => {
-      map[name] = COLORS[index % COLORS.length]
-    })
-    map['Sem categoria'] = '#475569' // Cor fixa (cinza escuro) para lançamentos órfãos
+    parentNames.forEach((name, index) => { map[name] = COLORS[index % COLORS.length] })
+    map['Sem categoria'] = '#475569' 
     return map
   }, [categories])
 
@@ -370,21 +442,17 @@ export default function Dashboard({ session }) {
 
   const filteredTransactions = transactions.filter(t => {
     const search = searchTerm.toLowerCase()
-    
     let matchCategory = true
     if (filterCategory) {
       const tCat = categories.find(c => c.id === t.category_id)
       matchCategory = String(t.category_id) === String(filterCategory) || (tCat && String(tCat.parent_id) === String(filterCategory))
     }
-
     const tCatName = categories.find(c => c.id === t.category_id)?.name || ''
     const matchSearch = searchTerm ? t.description?.toLowerCase().includes(search) || tCatName.toLowerCase().includes(search) : true
-    
     return matchCategory && matchSearch
   })
 
   const visibleTransactions = filteredTransactions.slice(0, visibleCount)
-
   const parentCategories = categories.filter(c => !c.parent_id && c.type === transactionType)
 
   return (
@@ -407,7 +475,6 @@ export default function Dashboard({ session }) {
         <section className="relative w-full overflow-visible rounded-3xl bg-gradient-to-br from-slate-900 to-slate-900/50 border border-white/5 p-6 shadow-2xl mb-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-white">Resumo do Mês</h2>
-            
             <div className="relative flex items-center gap-1 rounded-full bg-black/20 px-1 py-1">
               <button onClick={() => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-full hover:bg-white/5"><ChevronLeft size={16} /></button>
               <button onClick={() => setShowMonthPicker(!showMonthPicker)} className="text-xs font-bold uppercase tracking-widest text-white w-24 text-center hover:text-cyan-400 transition-colors py-1 px-2 rounded-lg hover:bg-white/5">
@@ -425,11 +492,7 @@ export default function Dashboard({ session }) {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       {MONTHS_SHORT.map((monthStr, index) => (
-                        <button
-                          key={monthStr}
-                          onClick={() => { setCurrentDate(new Date(pickerYear, index, 1)); setShowMonthPicker(false) }}
-                          className={`rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${currentDate.getMonth() === index && currentDate.getFullYear() === pickerYear ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
-                        >
+                        <button key={monthStr} onClick={() => { setCurrentDate(new Date(pickerYear, index, 1)); setShowMonthPicker(false) }} className={`rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${currentDate.getMonth() === index && currentDate.getFullYear() === pickerYear ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>
                           {monthStr}
                         </button>
                       ))}
@@ -445,6 +508,18 @@ export default function Dashboard({ session }) {
             <StatCard title="Restante (Mês)" amount={monthlyRemaining} colorClass="bg-cyan-500/10" borderColor="border-cyan-500/10" textColor="text-cyan-400" />
           </div>
         </section>
+
+        {/* GOALS CAROUSEL */}
+        {goals.length > 0 && (
+          <section className="w-full mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-300">Caixinhas & Metas</h3>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory custom-scrollbar">
+              {goals.map(goal => <GoalCard key={goal.id} goal={goal} onAddFunds={setFundingGoal} />)}
+            </div>
+          </section>
+        )}
 
         <div className="grid w-full grid-cols-1 md:grid-cols-2 gap-6 items-start">
           {/* CHART SECTION */}
@@ -464,10 +539,7 @@ export default function Dashboard({ session }) {
                           </text>
                         );
                       }}>
-                      {/* Cor atualizada para usar o mapeamento fixo */}
-                      {chartData.map((entry, i) => (
-                        <Cell key={i} fill={categoryColorMap[entry.name] || COLORS[i % COLORS.length]} style={{ outline: 'none' }} />
-                      ))}
+                      {chartData.map((entry, i) => <Cell key={i} fill={categoryColorMap[entry.name] || COLORS[i % COLORS.length]} style={{ outline: 'none' }} />)}
                     </Pie>
                     <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} itemStyle={{ color: '#e2e8f0' }} />
                   </PieChart>
@@ -479,42 +551,29 @@ export default function Dashboard({ session }) {
           {/* HISTORY SECTION */}
           <section className="w-full flex flex-col gap-4">
             <h3 className="text-lg font-bold text-white">Histórico</h3>
-            
             <div className="flex flex-col sm:flex-row w-full gap-3">
               <div className="relative flex-1">
                 <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input type="text" placeholder="Buscar lançamento..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full appearance-none rounded-2xl border border-white/5 bg-slate-900/80 py-4 pl-12 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all" />
               </div>
-              
-              <select 
-                value={filterCategory} 
-                onChange={(e) => setFilterCategory(e.target.value)} 
-                className="appearance-none rounded-2xl border border-white/5 bg-slate-900/80 px-4 py-4 text-sm text-white outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all sm:w-48 cursor-pointer"
-              >
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="appearance-none rounded-2xl border border-white/5 bg-slate-900/80 px-4 py-4 text-sm text-white outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all sm:w-48 cursor-pointer">
                 <option value="">Todas as categorias</option>
                 {categories.filter(c => !c.parent_id).map(parent => (
                   <optgroup key={parent.id} label={parent.name} className="bg-slate-900 font-bold text-white">
                     <option value={parent.id}>{parent.name} (Geral)</option>
                     {categories.filter(sub => sub.parent_id === parent.id).map(sub => (
-                      <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">
-                         ↳ {sub.name}
-                      </option>
+                      <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">↳ {sub.name}</option>
                     ))}
                   </optgroup>
                 ))}
               </select>
             </div>
-
             <div className="flex flex-col w-full gap-3 overflow-y-auto max-h-[50vh] md:max-h-[400px] pr-2 custom-scrollbar">
               {visibleTransactions.length > 0 
                 ? visibleTransactions.map((t) => <TransactionItem key={t.id} t={t} onEdit={openEditModal} onDelete={handleDelete} getCategoryPath={getCategoryPath} />)
                 : <div className="py-8 text-center text-sm text-slate-500">Nenhuma movimentação.</div>}
-              
               {visibleCount < filteredTransactions.length && (
-                <button 
-                  onClick={() => setVisibleCount(prev => prev + 15)}
-                  className="w-full py-4 mt-1 text-sm font-semibold text-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/10 border border-cyan-500/10 rounded-2xl transition-all"
-                >
+                <button onClick={() => setVisibleCount(prev => prev + 15)} className="w-full py-4 mt-1 text-sm font-semibold text-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/10 border border-cyan-500/10 rounded-2xl transition-all">
                   Carregar mais lançamentos...
                 </button>
               )}
@@ -523,110 +582,161 @@ export default function Dashboard({ session }) {
         </div>
       </div>
 
-      {/* FAB BTN */}
       <button onClick={() => setShowModal(true)} className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 transition-transform active:scale-90 md:bottom-10 md:right-10"><Plus size={28} /></button>
 
-      {/* TRANSACTION MODAL */}
+      {/* FUND GOAL MODAL */}
+      {fundingGoal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setFundingGoal(null)} />
+          <div className="relative w-full mx-4 max-w-sm rounded-3xl bg-slate-900 p-6 shadow-2xl animate-in zoom-in-95">
+            <h3 className="mb-2 text-xl font-bold text-white">Adicionar Saldo</h3>
+            <p className="mb-4 text-sm text-slate-300">Qual valor você deseja alocar na meta <span className="font-bold text-white">"{fundingGoal.name}"</span>?</p>
+            <form onSubmit={handleFundGoal}>
+              <div className="relative w-full mb-6">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">{fundingGoal.currency === 'USD' ? '$' : 'R$'}</span>
+                <input type="number" step="any" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} autoFocus placeholder="0.00" className="w-full appearance-none rounded-2xl bg-slate-950 py-4 pl-12 pr-4 text-xl font-bold text-white outline-none focus:ring-1 focus:ring-cyan-500/50" />
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setFundingGoal(null)} className="flex-1 rounded-xl bg-slate-800 py-3 font-semibold text-white">Cancelar</button>
+                <button type="submit" disabled={isSaving} className="flex-1 rounded-xl bg-cyan-500 py-3 font-bold text-white">{isSaving ? 'Salvando...' : 'Confirmar'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MULTIPURPOSE MODAL */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeModal} />
           <div className="relative w-full md:max-w-md bg-slate-900 p-6 md:rounded-3xl rounded-t-3xl shadow-2xl transition-transform animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-slate-700 md:hidden" />
-            <h2 className="text-xl font-bold text-white mb-6">{transactionToEdit ? 'Editar Lançamento' : 'Novo Lançamento'}</h2>
-            <form onSubmit={handleAddTransaction} noValidate className="flex flex-col gap-5 w-full">
-              <div className="flex w-full rounded-xl bg-slate-950 p-1">
-                <button type="button" onClick={() => { setTransactionType('expense'); setIsRecurring(false); setCategoryId(''); setFormErrors({}); resetCategoryForm() }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'expense' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Despesa</button>
-                <button type="button" onClick={() => { setTransactionType('income'); setIsRecurring(true); setCategoryId(''); setFormErrors({}); resetCategoryForm() }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'income' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Receita</button>
-              </div>
-              <div className="flex flex-col gap-1 w-full">
-                <div className="relative w-full">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">R$</span>
-                  <input type="number" step="any" value={amount} onChange={(e) => { setAmount(e.target.value); setFormErrors(prev => ({ ...prev, amount: null })) }} placeholder="0,00" className={`w-full appearance-none rounded-2xl bg-slate-950 py-5 pl-12 pr-4 text-2xl font-bold text-white outline-none focus:ring-2 focus:ring-cyan-500/50 ${formErrors.amount ? 'border border-rose-500' : ''}`} />
+            <h2 className="text-xl font-bold text-white mb-6">
+              {transactionType === 'goal' ? 'Criar Nova Meta' : (transactionToEdit ? 'Editar Lançamento' : 'Novo Lançamento')}
+            </h2>
+            
+            <form onSubmit={handleSaveItem} noValidate className="flex flex-col gap-5 w-full">
+              {!transactionToEdit && (
+                <div className="flex w-full rounded-xl bg-slate-950 p-1 mb-2">
+                  <button type="button" onClick={() => { setTransactionType('expense'); setFormErrors({}); resetCategoryForm() }} className={`flex-1 rounded-lg py-2.5 text-xs font-semibold transition-all ${transactionType === 'expense' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Despesa</button>
+                  <button type="button" onClick={() => { setTransactionType('income'); setFormErrors({}); resetCategoryForm() }} className={`flex-1 rounded-lg py-2.5 text-xs font-semibold transition-all ${transactionType === 'income' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Receita</button>
+                  <button type="button" onClick={() => { setTransactionType('goal'); setFormErrors({}); resetCategoryForm() }} className={`flex-1 rounded-lg py-2.5 text-xs font-semibold transition-all ${transactionType === 'goal' ? 'bg-indigo-500/20 text-indigo-400 shadow-sm' : 'text-slate-500'}`}>Meta</button>
                 </div>
-                {formErrors.amount && <span className="text-xs font-medium text-rose-500">{formErrors.amount}</span>}
-              </div>
-              <div className="flex flex-col gap-2 w-full">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Categoria</label>
-                  {!isAddingCategory && categoryId && <button type="button" onClick={() => setCategoryToDelete(categories.find(c => c.id === categoryId))} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Excluir</button>}
-                </div>
-                
-                {isAddingCategory ? (
-                  <div className="flex flex-col gap-3 w-full bg-slate-950/50 p-4 rounded-xl border border-white/5 animate-in fade-in zoom-in-95">
-                    <input type="text" value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCategoryError('') }} autoFocus placeholder="Nome da categoria" className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
-                    
-                    <select value={newCategoryParentId} onChange={(e) => setNewCategoryParentId(e.target.value)} className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500">
-                      <option value="">↳ Categoria Principal (Sem pai)</option>
-                      {parentCategories.map(p => (
-                        <option key={p.id} value={p.id}>Subcategoria de: {p.name}</option>
-                      ))}
-                    </select>
+              )}
 
-                    <div className="flex gap-2 w-full mt-1">
-                      <button type="button" onClick={handleAddCategory} className="flex-1 rounded-xl bg-cyan-500 py-3 text-sm font-bold text-white hover:bg-cyan-400 transition-colors">Salvar Categoria</button>
-                      <button type="button" onClick={resetCategoryForm} className="rounded-xl bg-slate-800 px-4 flex items-center justify-center text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"><X size={18} /></button>
-                    </div>
-                    {categoryError && <span className="text-xs font-medium text-rose-500">{categoryError}</span>}
+              {transactionType === 'goal' ? (
+                <>
+                  <div className="flex flex-col gap-2 w-full">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Nome da Caixinha</label>
+                    <input type="text" value={goalName} onChange={(e) => { setGoalName(e.target.value); setFormErrors(prev => ({ ...prev, goalName: null })) }} placeholder="Ex: Viagem EUA - Agosto" className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500 ${formErrors.goalName ? 'border border-rose-500' : ''}`} />
+                    {formErrors.goalName && <span className="text-xs font-medium text-rose-500">{formErrors.goalName}</span>}
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-1 w-full">
-                    <div className="flex gap-2 w-full">
-                      <select 
-                        value={categoryId} 
-                        onChange={(e) => { setCategoryId(e.target.value); setFormErrors(prev => ({ ...prev, categoryId: null })) }} 
-                        className={`flex-1 appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500 ${formErrors.categoryId ? 'border border-rose-500' : ''}`}
-                      >
-                        <option value="" disabled>Selecione...</option>
-                        
-                        {parentCategories.map(parent => (
-                          <optgroup key={parent.id} label={parent.name} className="bg-slate-900 font-bold text-white">
-                            <option value={parent.id} className="text-white font-semibold">{parent.name} (Geral)</option>
-                            {categories.filter(sub => sub.parent_id === parent.id && sub.type === transactionType).map(sub => (
-                              <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">
-                                ↳ {sub.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
+                  <div className="flex gap-3 w-full">
+                    <div className="flex-1 flex flex-col gap-2">
+                      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Objetivo</label>
+                      <input type="number" step="any" value={goalTarget} onChange={(e) => { setGoalTarget(e.target.value); setFormErrors(prev => ({ ...prev, goalTarget: null })) }} placeholder="0.00" className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500 ${formErrors.goalTarget ? 'border border-rose-500' : ''}`} />
+                      {formErrors.goalTarget && <span className="text-xs font-medium text-rose-500">{formErrors.goalTarget}</span>}
+                    </div>
+                    <div className="w-28 flex flex-col gap-2">
+                      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Moeda</label>
+                      <select value={goalCurrency} onChange={(e) => setGoalCurrency(e.target.value)} className="w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm font-bold text-white outline-none focus:ring-1 focus:ring-indigo-500">
+                        <option value="BRL">BRL</option>
+                        <option value="USD">USD</option>
                       </select>
-
-                      <div className="relative group shrink-0">
-                        <button 
-                          type="button" 
-                          onClick={() => setIsAddingCategory(true)} 
-                          className="flex items-center justify-center h-full aspect-square w-12 rounded-xl bg-slate-950 border border-transparent text-cyan-400 hover:bg-slate-900 hover:text-cyan-300 hover:border-white/5 transition-all outline-none"
-                        >
-                          <Plus size={20} />
-                        </button>
-                        
-                        <div className="pointer-events-none absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity w-max bg-slate-800 text-xs font-medium text-white px-3 py-2 rounded-lg shadow-xl border border-white/10 z-50">
-                          Criar nova categoria
-                        </div>
-                      </div>
                     </div>
-                    {formErrors.categoryId && <span className="text-xs font-medium text-rose-500">{formErrors.categoryId}</span>}
                   </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-2 w-full">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Descrição</label>
-                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Opcional" className="w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
-              </div>
-              <div className="flex flex-col gap-2 w-full">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Data / Frequência</label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={isRecurring} onChange={(e) => { setIsRecurring(e.target.checked); setFormErrors(prev => ({ ...prev, date: null })) }} className="h-4 w-4 rounded accent-cyan-500" />
-                    <span className="text-xs text-slate-400">Recorrente</span>
-                  </label>
-                </div>
-                <div className="flex flex-col gap-1 w-full">
-                  {isRecurring ? <input type="number" min="1" max="31" value={recurringDay} onChange={(e) => { setRecurringDay(e.target.value); setFormErrors(prev => ({ ...prev, date: null })) }} placeholder="Dia do vencimento" className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`} /> : <input type="date" value={expenseDate} onChange={(e) => { setExpenseDate(e.target.value); setFormErrors(prev => ({ ...prev, date: null })) }} style={{ colorScheme: 'dark' }} className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`} />}
-                  {formErrors.date && <span className="text-xs font-medium text-rose-500">{formErrors.date}</span>}
-                </div>
-              </div>
-              <button type="submit" disabled={isSaving || isAddingCategory} className="mt-4 w-full rounded-2xl bg-cyan-500 py-4 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50">
-                {isSaving ? 'Salvando...' : (transactionToEdit ? 'Salvar Alterações' : 'Confirmar Lançamento')}
+                  <div className="flex flex-col gap-2 w-full">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Data Limite (Opcional)</label>
+                    <input type="date" value={goalDeadline} onChange={(e) => setGoalDeadline(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-1 w-full">
+                    <div className="relative w-full">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">R$</span>
+                      <input type="number" step="any" value={amount} onChange={(e) => { setAmount(e.target.value); setFormErrors(prev => ({ ...prev, amount: null })) }} placeholder="0,00" className={`w-full appearance-none rounded-2xl bg-slate-950 py-5 pl-12 pr-4 text-2xl font-bold text-white outline-none focus:ring-2 focus:ring-cyan-500/50 ${formErrors.amount ? 'border border-rose-500' : ''}`} />
+                    </div>
+                    {formErrors.amount && <span className="text-xs font-medium text-rose-500">{formErrors.amount}</span>}
+                  </div>
+                  
+                  {/* LABEL RESTAURADA AQUI */}
+                  <div className="flex flex-col gap-2 w-full mt-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Categoria</label>
+                      {!isAddingCategory && categoryId && (
+                        <button type="button" onClick={() => setCategoryToDelete(categories.find(c => c.id === categoryId))} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">
+                          Excluir
+                        </button>
+                      )}
+                    </div>
+                    
+                    {isAddingCategory ? (
+                      <div className="flex flex-col gap-3 w-full bg-slate-950/50 p-4 rounded-xl border border-white/5 animate-in fade-in zoom-in-95 mt-1">
+                        <input type="text" value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCategoryError('') }} autoFocus placeholder="Nome da categoria" className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
+                        <select value={newCategoryParentId} onChange={(e) => setNewCategoryParentId(e.target.value)} className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500">
+                          <option value="">↳ Categoria Principal (Sem pai)</option>
+                          {parentCategories.map(p => <option key={p.id} value={p.id}>Subcategoria de: {p.name}</option>)}
+                        </select>
+                        <div className="flex gap-2 w-full mt-1">
+                          <button type="button" onClick={handleAddCategory} className="flex-1 rounded-xl bg-cyan-500 py-3 text-sm font-bold text-white hover:bg-cyan-400 transition-colors">Salvar Categoria</button>
+                          <button type="button" onClick={resetCategoryForm} className="rounded-xl bg-slate-800 px-4 flex items-center justify-center text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"><X size={18} /></button>
+                        </div>
+                        {categoryError && <span className="text-xs font-medium text-rose-500">{categoryError}</span>}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="flex gap-2 w-full">
+                          <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setFormErrors(prev => ({ ...prev, categoryId: null })) }} className={`flex-1 appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500 ${formErrors.categoryId ? 'border border-rose-500' : ''}`}>
+                            <option value="" disabled>Selecione...</option>
+                            {parentCategories.map(parent => (
+                              <optgroup key={parent.id} label={parent.name} className="bg-slate-900 font-bold text-white">
+                                <option value={parent.id} className="text-white font-semibold">{parent.name} (Geral)</option>
+                                {categories.filter(sub => sub.parent_id === parent.id && sub.type === transactionType).map(sub => (
+                                  <option key={sub.id} value={sub.id} className="text-slate-300 font-normal">↳ {sub.name}</option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                          
+                          <div className="relative group shrink-0">
+                            <button 
+                              type="button" 
+                              data-testid="add-category-btn"
+                              onClick={() => setIsAddingCategory(true)} 
+                              className="flex items-center justify-center w-[52px] h-[52px] rounded-xl bg-slate-950 border border-transparent text-cyan-400 hover:bg-slate-900 hover:text-cyan-300 hover:border-white/5 transition-all outline-none"
+                            >
+                              <Plus size={20} />
+                            </button>
+                            <div className="pointer-events-none absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity w-max bg-slate-800 text-xs font-medium text-white px-3 py-2 rounded-lg shadow-xl border border-white/10 z-50">
+                              Criar nova categoria
+                            </div>
+                          </div>
+                        </div>
+                        {formErrors.categoryId && <span className="text-xs font-medium text-rose-500">{formErrors.categoryId}</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 w-full mt-2">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Descrição</label>
+                    <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Opcional" className="w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
+                  </div>
+
+                  <div className="flex flex-col gap-2 w-full">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Data / Frequência</label>
+                    <label className="flex items-center gap-2 cursor-pointer mb-1">
+                      <input type="checkbox" checked={isRecurring} onChange={(e) => { setIsRecurring(e.target.checked); setFormErrors(prev => ({ ...prev, date: null })) }} className="h-4 w-4 rounded accent-cyan-500" />
+                      <span className="text-xs text-slate-400">Recorrente</span>
+                    </label>
+                    {isRecurring ? <input type="number" min="1" max="31" value={recurringDay} onChange={(e) => { setRecurringDay(e.target.value); setFormErrors(prev => ({ ...prev, date: null })) }} placeholder="Dia do vencimento" className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`} /> : <input type="date" value={expenseDate} onChange={(e) => { setExpenseDate(e.target.value); setFormErrors(prev => ({ ...prev, date: null })) }} style={{ colorScheme: 'dark' }} className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`} />}
+                    {formErrors.date && <span className="text-xs font-medium text-rose-500">{formErrors.date}</span>}
+                  </div>
+                </>
+              )}
+
+              <button type="submit" disabled={isSaving || isAddingCategory} className={`mt-4 w-full rounded-2xl py-4 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50 ${transactionType === 'goal' ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-cyan-500 hover:bg-cyan-400'}`}>
+                {isSaving ? 'Salvando...' : (transactionToEdit ? 'Salvar Alterações' : 'Confirmar')}
               </button>
             </form>
           </div>
@@ -678,7 +788,7 @@ export default function Dashboard({ session }) {
         </div>
       )}
 
-      {/* AUX MODALS */}
+      {/* DELETE CATEGORY MODAL */}
       {categoryToDelete && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setCategoryToDelete(null)} />
@@ -692,6 +802,8 @@ export default function Dashboard({ session }) {
           </div>
         </div>
       )}
+
+      {/* ERROR MESSAGE MODAL */}
       {errorMessage && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setErrorMessage('')} />
