@@ -47,7 +47,8 @@ const createChainableMock = (table) => {
         resolve({
           data: [
             { id: 1, name: 'Viagem EUA - Hardware', target_amount: 3000, current_amount: 500, currency: 'USD', deadline: '2026-08-15' },
-            { id: 2, name: 'Reserva de Emergência', target_amount: 10000, current_amount: 2000, currency: 'BRL', deadline: null }
+            { id: 2, name: 'Reserva de Emergência', target_amount: 10000, current_amount: 2000, currency: 'BRL', deadline: null },
+            { id: 3, name: 'Meta Vazia', target_amount: 1000, current_amount: 0, currency: 'BRL', deadline: null }
           ],
           error: null
         })
@@ -194,18 +195,43 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     expect(await screen.findByText('Valor maior que o saldo atual.')).toBeInTheDocument()
   })
 
-  it('deve excluir uma meta', async () => {
+  // --- NOVO TESTE: Exclusão COM dinheiro (gera resgate) ---
+  it('deve excluir uma meta com saldo e resgatar o valor para o saldo principal', async () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
     const deleteGoalBtns = screen.getAllByTitle('Excluir meta')
-    await user.click(deleteGoalBtns[0])
+    await user.click(deleteGoalBtns[0]) // ID 1 - Viagem EUA (500 USD)
     
     const confirmBtn = screen.getByText('Excluir', { selector: 'button' })
     await user.click(confirmBtn)
 
     expect(mockDelete).toHaveBeenCalled()
     expect(mockEq).toHaveBeenCalledWith('id', 1)
+    
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ description: 'Resgate Automático: Viagem EUA - Hardware (Excluída)', type: 'income', amount: 2725 })
+    ]))
+  })
+
+  // --- NOVO TESTE: Exclusão SEM dinheiro (NÃO gera resgate) ---
+  it('deve excluir uma meta vazia sem gerar registro de resgate', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    const deleteGoalBtns = screen.getAllByTitle('Excluir meta')
+    await user.click(deleteGoalBtns[2]) // ID 3 - Meta Vazia (0 BRL)
+    
+    mockInsert.mockClear() // Limpamos os inserts prévios para checar se o delete gera algo
+    
+    const confirmBtn = screen.getByText('Excluir', { selector: 'button' })
+    await user.click(confirmBtn)
+
+    expect(mockDelete).toHaveBeenCalled()
+    expect(mockEq).toHaveBeenCalledWith('id', 3)
+    
+    // Como a meta tinha saldo 0, nenhum resgate deve ser injetado no banco
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 
   // --- 3. VALIDAÇÃO E CONFIGURAÇÃO DE CONTA ---

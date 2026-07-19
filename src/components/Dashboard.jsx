@@ -200,7 +200,6 @@ export default function Dashboard({ session }) {
     const { endDate } = getMonthBounds(currentDate)
     const { data, error } = await supabase
       .from('expenses')
-      // Adicionado created_at ao select para ordenação de precisão
       .select('id, amount, description, expense_date, category_id, type, is_recurring, created_at')
       .lte('expense_date', endDate)
 
@@ -228,7 +227,6 @@ export default function Dashboard({ session }) {
       }
     })
     
-    // Nova lógica de ordenação blindada (Dia > Momento de criação)
     currentMonthData.sort((a, b) => {
       const timeA = new Date(a.expense_date).getTime();
       const timeB = new Date(b.expense_date).getTime();
@@ -361,14 +359,52 @@ export default function Dashboard({ session }) {
   const executeDeleteGoal = async () => {
     if (!goalToDelete) return
     setIsSaving(true)
-    const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id)
-    setIsSaving(false)
-    setGoalToDelete(null)
 
+    const refundAmount = Number.parseFloat(goalToDelete.current_amount || 0)
+
+    const { error } = await supabase.from('goals').delete().eq('id', goalToDelete.id)
+    
     if (error) {
+      setIsSaving(false)
       setErrorMessage('Erro ao excluir meta: ' + error.message)
       return
     }
+
+    // Se havia dinheiro na meta, devolve para o Resumo do Mês
+    if (refundAmount > 0) {
+      let metaCat = categories.find(c => c.name === 'Metas (Resgates)' && c.type === 'income')
+      
+      if (!metaCat) {
+        const { data: catData } = await supabase.from('categories').insert([{ 
+          name: 'Metas (Resgates)', 
+          type: 'income', 
+          user_id: session.user.id 
+        }]).select()
+        if (catData && catData.length > 0) metaCat = catData[0]
+      }
+
+      if (!metaCat) {
+         metaCat = categories.find(c => c.type === 'income' && !c.parent_id) || categories[0]
+      }
+
+      const effectiveAmount = goalToDelete.currency === 'USD' ? refundAmount * USD_RATE : refundAmount
+      const txPayload = {
+        user_id: session.user.id,
+        category_id: metaCat.id,
+        amount: effectiveAmount,
+        description: `Resgate Automático: ${goalToDelete.name} (Excluída)`,
+        expense_date: new Date().toISOString().split('T')[0],
+        type: 'income',
+        is_recurring: false
+      }
+      
+      await supabase.from('expenses').insert([txPayload])
+      await fetchTransactions()
+      await fetchCategories()
+    }
+
+    setIsSaving(false)
+    setGoalToDelete(null)
     setGoals(goals.filter(g => g.id !== goalToDelete.id))
   }
 
@@ -623,7 +659,7 @@ export default function Dashboard({ session }) {
             </div>
           </div>
           <div className="flex w-full gap-3">
-            <StatCard title="Receitas" amount={totalIncome} colorClass="bg-emerald-500/10" borderColor="border-emerald-500/10" textColor="textemerald-400" />
+            <StatCard title="Receitas" amount={totalIncome} colorClass="bg-emerald-500/10" borderColor="border-emerald-500/10" textColor="text-emerald-400" />
             <StatCard title="Despesas" amount={totalExpense} colorClass="bg-rose-500/10" borderColor="border-rose-500/10" textColor="text-rose-400" />
             <StatCard title="Restante (Mês)" amount={monthlyRemaining} colorClass="bg-cyan-500/10" borderColor="border-cyan-500/10" textColor="text-cyan-400" />
           </div>
