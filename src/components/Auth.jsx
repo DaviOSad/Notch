@@ -36,7 +36,7 @@ function useAuthLogic() {
       setPasswordError('Preencha este campo.')
       hasValidationErrors = true
     } else if (password.length < 6) {
-      setPasswordError('A senha deve ter pelo menos 6 caracteres.')
+      setPasswordError('A senha deve ter pelo menos 8 caracteres.')
       hasValidationErrors = true
     } else {
       setPasswordError('')
