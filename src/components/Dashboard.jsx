@@ -55,6 +55,19 @@ export default function Dashboard({ session }) {
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
+  // Trava de Scroll do Body
+  useEffect(() => {
+    if (showModal || showSettings || showMonthPicker || categoryToDelete || errorMessage) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'auto'
+    }
+
+    return () => {
+      document.body.style.overflow = 'auto'
+    }
+  }, [showModal, showSettings, showMonthPicker, categoryToDelete, errorMessage])
+
   useEffect(() => {
     if (showMonthPicker) setPickerYear(currentDate.getFullYear())
   }, [showMonthPicker, currentDate])
@@ -570,7 +583,6 @@ export default function Dashboard({ session }) {
 
             <h2 className="text-xl font-bold text-white mb-6">Novo Lançamento</h2>
 
-            {/* Form com noValidate para desligar as mensagens padrão do navegador */}
             <form onSubmit={handleAddTransaction} noValidate className="flex flex-col gap-5 w-full">
               
               <div className="flex w-full rounded-xl bg-slate-950 p-1">
