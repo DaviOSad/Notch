@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { LogOut, Plus, Trash2, ChevronLeft, ChevronRight, X, AlertCircle, Search, Repeat } from 'lucide-react'
+import { LogOut, Plus, Trash2, ChevronLeft, ChevronRight, X, Search, Repeat, Wallet, Settings, User, Download } from 'lucide-react'
 
 const COLORS = ['#22c55e', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6']
 const MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -16,9 +16,11 @@ export default function Dashboard({ session }) {
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [currentDate, setCurrentDate] = useState(() => new Date())
+  const [accumulatedBalance, setAccumulatedBalance] = useState(0) 
+  
+  // Modal states
   const [showModal, setShowModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -31,14 +33,27 @@ export default function Dashboard({ session }) {
   const [newCategoryName, setNewCategoryName] = useState('')
   const [categoryError, setCategoryError] = useState('')
   
-  const [fieldErrors, setFieldErrors] = useState({})
+  // Estado para os erros do formulário
+  const [formErrors, setFormErrors] = useState({})
+  
+  // Delete Category states
   const [categoryToDelete, setCategoryToDelete] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
-
+  
+  // Picker states
   const [showMonthPicker, setShowMonthPicker] = useState(false)
   const [pickerYear, setPickerYear] = useState(currentDate.getFullYear())
   const [filterCategory, setFilterCategory] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Settings states
+  const [showSettings, setShowSettings] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
   useEffect(() => {
     if (showMonthPicker) setPickerYear(currentDate.getFullYear())
@@ -55,17 +70,14 @@ export default function Dashboard({ session }) {
   const fetchCategories = async () => {
     const { data, error } = await supabase.from('categories').select('*').order('created_at', { ascending: true })
     if (error) return console.error(error)
-
+    
     if (!data || data.length === 0) {
       const defaultCategories = [
         { name: 'Alimentação', user_id: session.user.id, type: 'expense' },
         { name: 'Transporte', user_id: session.user.id, type: 'expense' },
-        { name: 'Lazer', user_id: session.user.id, type: 'expense' },
         { name: 'Salário', user_id: session.user.id, type: 'income' },
-        { name: 'Investimentos', user_id: session.user.id, type: 'income' },
       ]
-      const { data: inserted, error: insertErr } = await supabase.from('categories').insert(defaultCategories).select('*')
-      if (insertErr) return console.error(insertErr)
+      const { data: inserted } = await supabase.from('categories').insert(defaultCategories).select('*')
       setCategories(inserted ?? [])
       return
     }
@@ -73,52 +85,90 @@ export default function Dashboard({ session }) {
   }
 
   const fetchTransactions = async () => {
-    const { startDate, endDate } = getMonthBounds(currentDate)
+    const { endDate } = getMonthBounds(currentDate)
+    
     const { data, error } = await supabase
       .from('expenses')
       .select('id, amount, description, expense_date, category_id, categories(name), type, is_recurring')
       .lte('expense_date', endDate)
-      .or(`expense_date.gte.${startDate},is_recurring.eq.true`)
 
     if (error) return console.error(error)
 
     const viewedYear = currentDate.getFullYear()
     const viewedMonth = currentDate.getMonth()
 
-    const processedData = (data ?? []).map((t) => {
-      if (t.is_recurring) {
-        const originalDay = t.expense_date.split('-')[2]
-        const lastDayOfMonth = new Date(viewedYear, viewedMonth + 1, 0).getDate()
-        const safeDay = Math.min(Number.parseInt(originalDay, 10), lastDayOfMonth)
-        const newDate = `${viewedYear}-${String(viewedMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
-        return { ...t, expense_date: newDate }
-      }
-      return t
-    })
+    let accIncome = 0
+    let accExpense = 0
+    const currentMonthData = []
 
-    processedData.sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date))
-    setTransactions(processedData)
+    ;(data ?? []).forEach((t) => {
+      const tDate = new Date(t.expense_date + 'T12:00:00')
+      const tYear = tDate.getFullYear()
+      const tMonth = tDate.getMonth()
+      
+      let occurrences = 1
+      
+      if (t.is_recurring) {
+        occurrences = (viewedYear - tYear) * 12 + (viewedMonth - tMonth) + 1
+        if (occurrences < 0) occurrences = 0
+        
+        if (occurrences > 0) {
+          const originalDay = t.expense_date.split('-')[2]
+          const lastDayOfMonth = new Date(viewedYear, viewedMonth + 1, 0).getDate()
+          const safeDay = Math.min(Number.parseInt(originalDay, 10), lastDayOfMonth)
+          
+          currentMonthData.push({ 
+            ...t, 
+            expense_date: `${viewedYear}-${String(viewedMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}` 
+          })
+        }
+      } else {
+        if (tYear === viewedYear && tMonth === viewedMonth) {
+          currentMonthData.push(t)
+        }
+      }
+
+      if (occurrences > 0) {
+        const val = Number(t.amount) * (t.is_recurring ? occurrences : 1)
+        if (t.type === 'income') accIncome += val
+        else accExpense += val
+      }
+    })
+    
+    currentMonthData.sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date))
+    
+    setTransactions(currentMonthData)
+    setAccumulatedBalance(accIncome - accExpense)
   }
 
   const handleAddCategory = async () => {
     setCategoryError('')
     const trimmedName = newCategoryName.trim()
-    if (!trimmedName) return setCategoryError('Preencha este campo.')
+    if (!trimmedName) {
+      setCategoryError('Preencha o nome da categoria.')
+      return
+    }
 
-    const exists = categories.some((cat) => cat.name.toLowerCase() === trimmedName.toLowerCase() && (cat.type || 'expense') === transactionType)
-    if (exists) return setCategoryError('Já existe para este tipo.')
+    const exists = categories.some(
+      (cat) => cat.name.toLowerCase() === trimmedName.toLowerCase() && (cat.type || 'expense') === transactionType
+    )
+    if (exists) {
+      setCategoryError('Esta categoria já existe.')
+      return
+    }
 
     setIsSaving(true)
     const { data, error } = await supabase.from('categories').insert([{ name: trimmedName, user_id: session.user.id, type: transactionType }]).select()
     setIsSaving(false)
 
     if (error) {
-      setCategoryError(error.code === '23505' ? 'Esta categoria já existe.' : 'Erro ao criar categoria.')
+      setCategoryError(error.code === '23505' ? 'Esta categoria já existe no banco.' : 'Erro ao criar categoria.')
     } else if (data) {
       setCategories((prev) => [...prev, data[0]].sort((a, b) => a.name.localeCompare(b.name)))
       setCategoryId(data[0].id)
       setNewCategoryName('')
       setIsAddingCategory(false)
+      setFormErrors(prev => ({ ...prev, categoryId: null }))
     }
   }
 
@@ -136,9 +186,14 @@ export default function Dashboard({ session }) {
     setCategoryToDelete(null)
 
     if (error) {
-      setErrorMessage(error.code === '23503' ? 'Existem registros vinculados a esta categoria.' : 'Erro ao excluir.')
+      if (error.code === '23503') {
+        setErrorMessage('Não é possível excluir esta categoria porque já existem lançamentos associados a ela.')
+      } else {
+        setErrorMessage('Erro ao excluir categoria: ' + error.message)
+      }
       return
     }
+
     setCategories(categories.filter(c => c.id !== categoryToDelete.id))
     setCategoryId('')
   }
@@ -147,66 +202,136 @@ export default function Dashboard({ session }) {
     setShowModal(false)
     setAmount('')
     setDescription('')
-    setExpenseDate(new Date().toISOString().split('T')[0])
-    setTransactionType('expense')
     setCategoryId('')
-    setIsRecurring(false)
-    setRecurringDay(new Date().getDate())
+    setNewCategoryName('')
     setIsAddingCategory(false)
     setCategoryError('')
-    setNewCategoryName('')
-    setFieldErrors({})
+    setErrorMessage('')
+    setFormErrors({})
+    setTransactionType('expense')
+    setIsRecurring(false)
+    setRecurringDay(new Date().getDate())
+  }
+
+  const closeSettings = () => {
+    setShowSettings(false)
+    setIsChangingPassword(false)
+    setPasswordError('')
+    setPasswordSuccess('')
+    setNewPassword('')
+    setConfirmPassword('')
   }
 
   const handleAddTransaction = async (e) => {
     e.preventDefault()
+    
     const errors = {}
-    if (!amount) errors.amount = 'Preencha.'
-    if (!isAddingCategory && !categoryId) errors.categoryId = 'Selecione.'
-    if (isRecurring && !recurringDay) errors.recurringDay = 'Inválido.'
-    else if (!isRecurring && !expenseDate) errors.expenseDate = 'Preencha.'
+    if (!amount || Number(amount) <= 0) errors.amount = 'Preencha um valor maior que zero.'
+    if (!isAddingCategory && !categoryId) errors.categoryId = 'Selecione uma categoria.'
+    
+    if (isRecurring && (!recurringDay || recurringDay < 1 || recurringDay > 31)) {
+      errors.date = 'Preencha um dia válido (1 a 31).'
+    } else if (!isRecurring && !expenseDate) {
+      errors.date = 'Preencha a data do lançamento.'
+    }
 
-    if (Object.keys(errors).length > 0) return setFieldErrors(errors)
-    setFieldErrors({})
-
-    const parsedAmount = Number.parseFloat(amount)
-    if (parsedAmount < 0) return setErrorMessage('O valor não pode ser negativo.')
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+    
+    setFormErrors({})
 
     let finalDate = expenseDate
     if (isRecurring) {
-      const y = currentDate.getFullYear()
-      const m = String(currentDate.getMonth() + 1).padStart(2, '0')
-      const d = String(recurringDay).padStart(2, '0')
-      finalDate = `${y}-${m}-${d}`
+      finalDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(recurringDay).padStart(2, '0')}`
     }
 
     setIsSaving(true)
-    const { error } = await supabase.from('expenses').insert([{
-      user_id: session.user.id, category_id: categoryId, amount: parsedAmount, description: description.trim(), expense_date: finalDate, type: transactionType, is_recurring: isRecurring
+    await supabase.from('expenses').insert([{
+      user_id: session.user.id, 
+      category_id: categoryId, 
+      amount: Number.parseFloat(amount), 
+      description: description.trim(), 
+      expense_date: finalDate, 
+      type: transactionType, 
+      is_recurring: isRecurring
     }])
     setIsSaving(false)
-
-    if (error) return setErrorMessage(error.message)
     closeModal()
-    await fetchTransactions()
+    fetchTransactions()
   }
 
   const handleDelete = async (id) => {
-    const { error } = await supabase.from('expenses').delete().eq('id', id)
-    if (error) return setErrorMessage(error.message)
-    await fetchTransactions()
+    await supabase.from('expenses').delete().eq('id', id)
+    fetchTransactions()
   }
 
-  const goToPreviousMonth = () => setCurrentDate((date) => { const nd = new Date(date); nd.setMonth(nd.getMonth() - 1); return nd })
-  const goToNextMonth = () => setCurrentDate((date) => { const nd = new Date(date); nd.setMonth(nd.getMonth() + 1); return nd })
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault()
+    setPasswordError('')
+    setPasswordSuccess('')
 
-  const expenseCategories = useMemo(() => categories.filter(c => c.type === 'expense' || !c.type), [categories])
-  const incomeCategories = useMemo(() => categories.filter(c => c.type === 'income'), [categories])
-  const activeModalCategories = transactionType === 'expense' ? expenseCategories : incomeCategories
+    if (newPassword.length < 6) {
+      setPasswordError('A senha deve ter pelo menos 6 caracteres.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('As senhas não coincidem.')
+      return
+    }
 
-  const totalIncome = useMemo(() => transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0), [transactions])
-  const totalExpense = useMemo(() => transactions.filter(t => t.type === 'expense' || !t.type).reduce((sum, t) => sum + Number(t.amount), 0), [transactions])
-  const balance = totalIncome - totalExpense
+    setIsUpdatingPassword(true)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setIsUpdatingPassword(false)
+
+    if (error) {
+      setPasswordError('Erro ao atualizar: ' + error.message)
+    } else {
+      setPasswordSuccess('Senha atualizada com sucesso!')
+      setNewPassword('')
+      setConfirmPassword('')
+      setTimeout(() => {
+        setIsChangingPassword(false)
+        setPasswordSuccess('')
+      }, 2000)
+    }
+  }
+
+  const handleExportCSV = () => {
+    if (transactions.length === 0) return
+    
+    const headers = ['Data', 'Categoria', 'Descricao', 'Tipo', 'Valor', 'Recorrente']
+    const csvRows = [headers.join(',')]
+    
+    transactions.forEach(t => {
+      const date = t.expense_date
+      const category = t.categories?.name || 'Sem categoria'
+      const desc = t.description || ''
+      const type = t.type === 'income' ? 'Receita' : 'Despesa'
+      const val = t.amount
+      const rec = t.is_recurring ? 'Sim' : 'Nao'
+      
+      csvRows.push(`${date},"${category}","${desc}",${type},${val},${rec}`)
+    })
+    
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.setAttribute('hidden', '')
+    a.setAttribute('href', url)
+    a.setAttribute('download', `lancamentos_${MONTHS_SHORT[currentDate.getMonth()]}_${currentDate.getFullYear()}.csv`)
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  const goToPreviousMonth = () => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+  const goToNextMonth = () => setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+
+  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0)
+  const totalExpense = transactions.filter(t => t.type === 'expense' || !t.type).reduce((sum, t) => sum + Number(t.amount), 0)
+  const monthlyRemaining = totalIncome - totalExpense
 
   const expensesByCategory = useMemo(() => {
     return transactions.filter(t => t.type === 'expense' || !t.type).reduce((acc, expense) => {
@@ -215,258 +340,468 @@ export default function Dashboard({ session }) {
       return acc
     }, {})
   }, [transactions])
+  
   const chartData = Object.entries(expensesByCategory).map(([name, value]) => ({ name, value }))
 
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      const matchCat = filterCategory ? t.category_id === filterCategory : true
-      const search = searchTerm.toLowerCase()
-      const matchSearch = searchTerm ? t.description?.toLowerCase().includes(search) || t.categories?.name?.toLowerCase().includes(search) : true
-      return matchCat && matchSearch
-    });
-  }, [transactions, filterCategory, searchTerm])
+  const filteredTransactions = transactions.filter(t => {
+    const matchCat = filterCategory ? t.category_id === filterCategory : true
+    const search = searchTerm.toLowerCase()
+    const matchSearch = searchTerm ? t.description?.toLowerCase().includes(search) || t.categories?.name?.toLowerCase().includes(search) : true
+    return matchCat && matchSearch
+  })
 
-  const totalFiltered = useMemo(() => filteredTransactions.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0), [filteredTransactions])
+  const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-6 sm:px-6 lg:px-8 w-full max-w-[100vw] overflow-x-hidden">
-      <div className="mx-auto w-full max-w-7xl">
+    <div className="relative min-h-screen w-full bg-slate-950 font-sans text-slate-100 overflow-x-hidden selection:bg-cyan-500/30">
+      
+      <div className="mx-auto w-full max-w-lg md:max-w-5xl px-4 pt-6 pb-28 md:pb-12">
         
-        {/* HEADER */}
-        <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur sm:flex-row sm:items-center sm:justify-between w-full">
-          <div className="max-w-full">
-            <p className="text-xs sm:text-sm uppercase tracking-[0.2em] sm:tracking-[0.35em] text-cyan-300/80 truncate">Dashboard</p>
-            <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-white truncate">Finanças</h1>
+        <header className="flex w-full items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400">
+              <Wallet size={20} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold leading-none tracking-tight">Finanças</h1>
+            </div>
           </div>
-          <button onClick={() => supabase.auth.signOut()} className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-rose-400/40 hover:text-rose-300 w-full sm:w-auto">
-            <LogOut size={18} /> Sair
-          </button>
-        </div>
-
-        {/* ESTRUTURA PRINCIPAL (Colunas em telas grandes) */}
-        <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-          
-          {/* COLUNA ESQUERDA */}
-          <div className="flex w-full flex-col gap-6">
-            
-            {/* CARDS DE RESUMO E CONTROLE DE MÊS */}
-            <section className="relative z-20 flex w-full flex-col rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-2xl backdrop-blur sm:p-6">
-              <div className="mb-4 flex w-full flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Controle Mensal</h2>
-                </div>
-                
-                {/* Seletor de Mês Blindado */}
-                <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-2 rounded-xl bg-white/5 p-1">
-                  <button onClick={goToPreviousMonth} className="p-2 text-slate-300 hover:text-white"><ChevronLeft size={18} /></button>
-                  <div className="relative flex-1 text-center sm:flex-none">
-                    <button onClick={() => setShowMonthPicker(!showMonthPicker)} className="w-full px-2 py-1 text-sm font-semibold uppercase tracking-widest text-cyan-200">
-                      {currentDate.toLocaleString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '')}
-                    </button>
-                    {showMonthPicker && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)} />
-                        <div className="absolute left-1/2 top-[120%] z-50 w-[280px] -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-900/95 p-4 shadow-2xl sm:w-64 sm:left-auto sm:right-0 sm:translate-x-0">
-                          <div className="mb-4 flex items-center justify-between">
-                            <button onClick={() => setPickerYear(y => y - 1)} className="p-1 text-slate-400 hover:text-white"><ChevronLeft size={18} /></button>
-                            <span className="font-bold text-white">{pickerYear}</span>
-                            <button onClick={() => setPickerYear(y => y + 1)} className="p-1 text-slate-400 hover:text-white"><ChevronRight size={18} /></button>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            {MONTHS_SHORT.map((monthStr, index) => {
-                              const isCurrent = currentDate.getMonth() === index && currentDate.getFullYear() === pickerYear;
-                              return (
-                                <button key={monthStr} onClick={() => { setCurrentDate(new Date(pickerYear, index, 1)); setShowMonthPicker(false) }} className={`rounded-xl py-2 text-sm font-medium ${isCurrent ? 'bg-cyan-500 text-white' : 'text-slate-300 hover:bg-white/10'}`}>
-                                  {monthStr}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <button onClick={goToNextMonth} className="p-2 text-slate-300 hover:text-white"><ChevronRight size={18} /></button>
-                </div>
-              </div>
-
-              {/* Grid 2x2 no mobile, 3 colunas no Desktop */}
-              <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-                  <p className="text-xs sm:text-sm text-emerald-200/70">Receitas</p>
-                  <p className="mt-1 text-base sm:text-xl font-bold text-emerald-400 truncate">R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
-                  <p className="text-xs sm:text-sm text-rose-200/70">Despesas</p>
-                  <p className="mt-1 text-base sm:text-xl font-bold text-rose-400 truncate">R$ {totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div className="col-span-2 sm:col-span-1 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                  <p className="text-xs sm:text-sm text-cyan-200/70">Saldo do mês</p>
-                  <p className="mt-1 text-xl font-bold text-cyan-400 truncate">R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-              </div>
-            </section>
-
-            {/* GRÁFICO */}
-            <section className="flex w-full flex-col rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-2xl backdrop-blur sm:p-6">
-              <h2 className="mb-4 text-lg font-semibold text-white">Gráfico</h2>
-              <div className="h-[250px] w-full">
-                {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={chartData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
-                        {chartData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 text-sm text-slate-400">Sem dados.</div>
-                )}
-              </div>
-            </section>
-          </div>
-
-          {/* COLUNA DIREITA E LISTA DE TRANSAÇÕES */}
-          <div className="flex w-full flex-col gap-6">
-            
-            {/* BOTÃO NOVO LANÇAMENTO (Fixo na grid para Desktop, aparece igual no Mobile) */}
-            <button onClick={() => setShowModal(true)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-500 py-4 font-bold text-white shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400">
-              <Plus size={20} /> Adicionar Lançamento
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-white transition-colors rounded-xl hover:bg-white/5">
+              <Settings size={20} />
             </button>
+            <button onClick={() => supabase.auth.signOut()} className="p-2 text-slate-400 hover:text-rose-400 transition-colors rounded-xl hover:bg-white/5">
+              <LogOut size={20} />
+            </button>
+          </div>
+        </header>
 
-            {/* LISTA */}
-            <section className="flex w-full flex-col rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-2xl backdrop-blur sm:p-6">
-              <div className="mb-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Lançamentos</h2>
-                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-300">{filteredTransactions.length} regs</span>
-                </div>
-                
-                {/* Filtros em linha no Mobile */}
-                <div className="flex w-full flex-col gap-2 sm:flex-row">
-                  <div className="relative w-full sm:flex-1">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950/50 py-2.5 pl-9 pr-3 text-sm text-slate-200 outline-none" />
-                  </div>
-                  <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2.5 text-sm text-slate-200 outline-none sm:w-auto">
-                    <option value="">Todas</option>
-                    {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    {incomeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-              </div>
+        <section className="relative w-full overflow-visible rounded-3xl bg-gradient-to-br from-slate-900 to-slate-900/50 border border-white/5 p-6 shadow-2xl mb-6">
+          
+          <div className="flex items-center justify-between mb-6">
+            <p className="text-sm font-medium text-slate-400">Saldo Atual (Acumulado)</p>
+            
+            <div className="relative flex items-center gap-1 rounded-full bg-black/20 px-1 py-1">
+              <button onClick={goToPreviousMonth} className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-full hover:bg-white/5">
+                <ChevronLeft size={16} />
+              </button>
+              
+              <button 
+                onClick={() => setShowMonthPicker(!showMonthPicker)} 
+                className="text-xs font-bold uppercase tracking-widest text-white w-24 text-center hover:text-cyan-400 transition-colors py-1 px-2 rounded-lg hover:bg-white/5"
+              >
+                {MONTHS_SHORT[currentDate.getMonth()]} {currentDate.getFullYear()}
+              </button>
+              
+              <button onClick={goToNextMonth} className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-full hover:bg-white/5">
+                <ChevronRight size={16} />
+              </button>
 
-              {/* Tabela com limite de altura adaptável */}
-              <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar max-h-[350px]">
-                {filteredTransactions.length > 0 ? (
-                  filteredTransactions.map((t) => {
-                    const isIncome = t.type === 'income'
-                    return (
-                      <article key={t.id} className="flex w-full items-center justify-between gap-2 rounded-2xl border border-white/5 bg-white/5 p-3.5 sm:p-4">
-                        <div className="flex min-w-0 flex-1 flex-col">
-                          <p className="truncate text-sm font-semibold text-white sm:text-base">{t.categories?.name ?? 'Sem categoria'}</p>
-                          <p className="truncate text-xs text-slate-400 mt-0.5">{t.description ? `${t.description} • ` : ''}{new Date(t.expense_date).toLocaleDateString('pt-BR')}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-                          <span className={`text-sm font-bold sm:text-base ${isIncome ? 'text-emerald-400' : 'text-white'}`}>
-                            {isIncome ? '+' : '-'} R$ {Number(t.amount).toFixed(2)}
-                          </span>
-                          <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg">
-                            <Trash2 size={16} />
+              {showMonthPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)} />
+                  <div className="absolute right-0 top-[120%] z-50 w-64 rounded-2xl border border-white/10 bg-slate-900 p-4 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
+                    <div className="mb-4 flex items-center justify-between">
+                      <button onClick={() => setPickerYear(y => y - 1)} className="p-2 text-slate-400 hover:bg-white/10 rounded-xl transition-colors"><ChevronLeft size={18} /></button>
+                      <span className="font-bold text-white text-base">{pickerYear}</span>
+                      <button onClick={() => setPickerYear(y => y + 1)} className="p-2 text-slate-400 hover:bg-white/10 rounded-xl transition-colors"><ChevronRight size={18} /></button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {MONTHS_SHORT.map((monthStr, index) => {
+                        const isCurrent = currentDate.getMonth() === index && currentDate.getFullYear() === pickerYear;
+                        return (
+                          <button
+                            key={monthStr}
+                            onClick={() => {
+                              setCurrentDate(new Date(pickerYear, index, 1))
+                              setShowMonthPicker(false)
+                            }}
+                            className={`rounded-xl py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                              isCurrent 
+                                ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/30' 
+                                : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                            }`}
+                          >
+                            {monthStr}
                           </button>
-                        </div>
-                      </article>
-                    )
-                  })
-                ) : (
-                  <div className="p-4 text-center text-sm text-slate-400 border border-dashed border-white/10 rounded-2xl">Nenhum registro encontrado.</div>
-                )}
+                        )
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <h2 className="text-4xl font-black tracking-tighter text-white mb-6">
+            {formatCurrency(accumulatedBalance)}
+          </h2>
+
+          <div className="flex w-full gap-3">
+            <div className="flex-1 rounded-2xl bg-emerald-500/10 p-3 sm:p-4 border border-emerald-500/10">
+              <p className="text-[10px] sm:text-xs font-bold text-emerald-400/70 mb-1 uppercase tracking-wider">Receitas</p>
+              <p className="text-sm sm:text-lg font-bold text-emerald-400 truncate">{formatCurrency(totalIncome)}</p>
+            </div>
+            <div className="flex-1 rounded-2xl bg-rose-500/10 p-3 sm:p-4 border border-rose-500/10">
+              <p className="text-[10px] sm:text-xs font-bold text-rose-400/70 mb-1 uppercase tracking-wider">Despesas</p>
+              <p className="text-sm sm:text-lg font-bold text-rose-400 truncate">{formatCurrency(totalExpense)}</p>
+            </div>
+            <div className="flex-1 rounded-2xl bg-cyan-500/10 p-3 sm:p-4 border border-cyan-500/10">
+              <p className="text-[10px] sm:text-xs font-bold text-cyan-400/70 mb-1 uppercase tracking-wider">Restante (Mês)</p>
+              <p className="text-sm sm:text-lg font-bold text-cyan-400 truncate">{formatCurrency(monthlyRemaining)}</p>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid w-full grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          
+          {chartData.length > 0 && (
+            <section className="w-full h-fit rounded-3xl bg-slate-900/50 border border-white/5 p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-6">Despesas por Categoria</h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie 
+                      data={chartData} 
+                      cx="50%" 
+                      cy="50%" 
+                      innerRadius={50} 
+                      outerRadius={80} 
+                      paddingAngle={2} 
+                      dataKey="value"
+                      labelLine={{ stroke: '#64748b', strokeWidth: 1 }}
+                      label={({ cx, cy, midAngle, innerRadius, outerRadius, value, name }) => {
+                        const RADIAN = Math.PI / 180;
+                        const radius = outerRadius + 20;
+                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                        
+                        return (
+                          <text 
+                            x={x} 
+                            y={y} 
+                            fill="#cbd5e1" 
+                            textAnchor={x > cx ? 'start' : 'end'} 
+                            dominantBaseline="central"
+                            fontSize="12"
+                            fontWeight="500"
+                          >
+                            {name}: {formatCurrency(value)}
+                          </text>
+                        );
+                      }}
+                    >
+                      {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => formatCurrency(value)} 
+                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} 
+                      itemStyle={{ color: '#e2e8f0' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </section>
+          )}
 
-          </div>
+          <section className="w-full flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">Histórico</h3>
+            </div>
+
+            <div className="relative w-full">
+              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input 
+                type="text" 
+                placeholder="Buscar lançamento..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+                className="w-full appearance-none rounded-2xl border border-white/5 bg-slate-900/80 py-4 pl-12 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all" 
+              />
+            </div>
+
+            <div className="flex flex-col w-full gap-3 overflow-y-auto max-h-[50vh] md:max-h-[400px] pr-2 custom-scrollbar">
+              {filteredTransactions.length > 0 ? (
+                filteredTransactions.map((t) => (
+                  <div key={t.id} className="group flex w-full items-center justify-between rounded-2xl bg-slate-900/40 p-4 transition-colors hover:bg-slate-900/80 border border-white/5">
+                    <div className="flex flex-1 flex-col min-w-0 pr-4">
+                      <p className="truncate text-base font-semibold text-slate-100">{t.categories?.name || 'Sem categoria'}</p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <p className="truncate text-xs text-slate-500">
+                          {t.description ? `${t.description} • ` : ''}
+                          {new Date(t.expense_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        </p>
+                        {t.is_recurring && <Repeat size={12} className="text-cyan-500/70 shrink-0 ml-1" />}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className={`text-base font-bold ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-100'}`}>
+                        {t.type === 'income' ? '+ ' : '- '}{formatCurrency(t.amount)}
+                      </span>
+                      <button onClick={() => handleDelete(t.id)} className="text-slate-600 hover:text-rose-500 transition-colors p-1">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-sm text-slate-500">Nenhuma movimentação.</div>
+              )}
+            </div>
+          </section>
         </div>
       </div>
 
-      {/* MODAL RESPONSIVO (Centralizado e adaptável) */}
+      <button 
+        onClick={() => setShowModal(true)} 
+        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 transition-transform active:scale-90 md:bottom-10 md:right-10"
+      >
+        <Plus size={28} />
+      </button>
+
+      {/* Main Bottom Sheet Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-t-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl sm:rounded-3xl custom-scrollbar animate-slide-up">
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeModal} />
+          
+          <div className="relative w-full md:max-w-md bg-slate-900 p-6 md:rounded-3xl rounded-t-3xl shadow-2xl transition-transform animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
             
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/10 sm:hidden"></div>
-            
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">Lançamento</h2>
-              <button onClick={closeModal} className="text-slate-400 hover:text-white"><X size={24} /></button>
-            </div>
+            <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-slate-700 md:hidden" />
 
-            <div className="mb-5 flex gap-2 rounded-xl bg-slate-950/50 p-1">
-              <button type="button" onClick={() => { setTransactionType('expense'); setCategoryId(''); setCategoryError(''); setIsRecurring(false) }} className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${transactionType === 'expense' ? 'bg-rose-500/20 text-rose-300' : 'text-slate-400'}`}>Despesa</button>
-              <button type="button" onClick={() => { setTransactionType('income'); setCategoryId(''); setCategoryError(''); setIsRecurring(true) }} className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${transactionType === 'income' ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-400'}`}>Receita</button>
-            </div>
+            <h2 className="text-xl font-bold text-white mb-6">Novo Lançamento</h2>
 
-            <form onSubmit={handleAddTransaction} className="flex flex-col gap-4">
-              <div>
-                <label className="text-sm text-slate-300">Valor</label>
-                <div className="relative mt-1">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">R$</span>
-                  <input type="number" step="any" min="0" value={amount} onChange={(e) => setAmount(Math.max(0, e.target.value))} className="w-full rounded-xl bg-slate-950/70 py-3.5 pl-11 pr-4 text-white outline-none border border-white/10 focus:border-cyan-400" placeholder="0.00" />
-                </div>
-                {fieldErrors.amount && <span className="text-xs text-rose-500 mt-1">{fieldErrors.amount}</span>}
+            {/* Form com noValidate para desligar as mensagens padrão do navegador */}
+            <form onSubmit={handleAddTransaction} noValidate className="flex flex-col gap-5 w-full">
+              
+              <div className="flex w-full rounded-xl bg-slate-950 p-1">
+                <button type="button" onClick={() => { setTransactionType('expense'); setIsRecurring(false); setCategoryId(''); setFormErrors({}); }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'expense' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Despesa</button>
+                <button type="button" onClick={() => { setTransactionType('income'); setIsRecurring(true); setCategoryId(''); setFormErrors({}); }} className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${transactionType === 'income' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500'}`}>Receita</button>
               </div>
 
-              <div>
-                <div className="flex justify-between mb-1">
-                  <label className="text-sm text-slate-300">Categoria</label>
-                  {!isAddingCategory && <button type="button" onClick={() => setIsAddingCategory(true)} className="text-xs text-cyan-400">+ Nova</button>}
+              <div className="flex flex-col gap-1 w-full">
+                <div className="relative w-full">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">R$</span>
+                  <input 
+                    type="number" 
+                    step="any" 
+                    value={amount} 
+                    onChange={(e) => { setAmount(e.target.value); setFormErrors(prev => ({ ...prev, amount: null })) }} 
+                    placeholder="0,00" 
+                    className={`w-full appearance-none rounded-2xl bg-slate-950 py-5 pl-12 pr-4 text-2xl font-bold text-white outline-none focus:ring-2 focus:ring-cyan-500/50 ${formErrors.amount ? 'border border-rose-500' : ''}`}
+                  />
                 </div>
+                {formErrors.amount && <span className="text-xs font-medium text-rose-500">{formErrors.amount}</span>}
+              </div>
+
+              <div className="flex flex-col gap-2 w-full">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Categoria</label>
+                  {!isAddingCategory && categoryId && (
+                    <button type="button" onClick={confirmDeleteCategory} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Excluir categoria</button>
+                  )}
+                </div>
+                
                 {isAddingCategory ? (
-                  <div className="flex gap-2">
-                    <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="w-full rounded-xl bg-slate-950/70 px-4 py-3.5 text-white border border-white/10 outline-none" placeholder="Nome..." />
-                    <button type="button" onClick={handleAddCategory} className="bg-cyan-500 px-4 rounded-xl text-white font-semibold">OK</button>
-                    <button type="button" onClick={() => setIsAddingCategory(false)} className="bg-white/5 px-3 rounded-xl text-white"><X size={18} /></button>
+                  <div className="flex flex-col gap-1 w-full">
+                    <div className="flex gap-2 w-full">
+                      <input type="text" value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCategoryError('') }} autoFocus placeholder="Nome da categoria" className="w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
+                      <button type="button" onClick={handleAddCategory} className="rounded-xl bg-slate-800 px-4 text-sm font-bold text-white hover:bg-slate-700 transition-colors">Criar</button>
+                      <button type="button" onClick={() => { setIsAddingCategory(false); setCategoryError(''); setNewCategoryName(''); setCategoryId(''); }} className="flex items-center justify-center rounded-xl bg-slate-900 px-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"><X size={18} /></button>
+                    </div>
+                    {categoryError && <span className="text-xs font-medium text-rose-500 ml-1">{categoryError}</span>}
                   </div>
                 ) : (
-                  <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded-xl bg-slate-950/70 px-4 py-3.5 text-white border border-white/10 outline-none">
-                    <option value="">Selecione...</option>
-                    {activeModalCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <div className="flex flex-col gap-1 w-full">
+                    <select 
+                      value={categoryId} 
+                      onChange={(e) => { 
+                        if(e.target.value === 'new') setIsAddingCategory(true); 
+                        else { setCategoryId(e.target.value); setFormErrors(prev => ({ ...prev, categoryId: null })) } 
+                      }} 
+                      className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500 ${formErrors.categoryId ? 'border border-rose-500' : ''}`}
+                    >
+                      <option value="" disabled>Selecione...</option>
+                      {(transactionType === 'expense' ? categories.filter(c => c.type !== 'income') : categories.filter(c => c.type === 'income')).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <option value="new" className="text-cyan-400 font-bold">+ Adicionar nova categoria</option>
+                    </select>
+                    {formErrors.categoryId && <span className="text-xs font-medium text-rose-500">{formErrors.categoryId}</span>}
+                  </div>
                 )}
-                {categoryError && <span className="text-xs text-rose-500 mt-1">{categoryError}</span>}
               </div>
 
-              <div>
-                <label className="text-sm text-slate-300">Descrição</label>
-                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full mt-1 rounded-xl bg-slate-950/70 px-4 py-3.5 text-white border border-white/10 outline-none" placeholder="Opcional..." />
+              <div className="flex flex-col gap-2 w-full">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Descrição</label>
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Opcional" className="w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500" />
               </div>
 
-              <label className="flex items-center gap-3 py-1 cursor-pointer">
-                <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="h-5 w-5 rounded bg-slate-950/70 border-white/20 text-cyan-500 focus:ring-cyan-500" />
-                <span className="text-sm text-slate-300">Transação recorrente</span>
-              </label>
-
-              {isRecurring ? (
-                <div>
-                  <label className="text-sm text-slate-300">Dia (1-31)</label>
-                  <input type="number" min="1" max="31" value={recurringDay} onChange={(e) => setRecurringDay(Math.min(31, Math.max(1, e.target.value)))} className="w-full mt-1 rounded-xl bg-slate-950/70 px-4 py-3.5 text-white border border-white/10 outline-none" />
+              <div className="flex flex-col gap-2 w-full">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Data / Frequência</label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={isRecurring} onChange={(e) => { setIsRecurring(e.target.checked); setFormErrors(prev => ({ ...prev, date: null })) }} className="h-4 w-4 rounded accent-cyan-500" />
+                    <span className="text-xs text-slate-400">Recorrente</span>
+                  </label>
                 </div>
-              ) : (
-                <div>
-                  <label className="text-sm text-slate-300">Data</label>
-                  <input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} style={{ colorScheme: 'dark' }} className="w-full mt-1 rounded-xl bg-slate-950/70 px-4 py-3.5 text-white border border-white/10 outline-none" />
+                
+                <div className="flex flex-col gap-1 w-full">
+                  {isRecurring ? (
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="31" 
+                      value={recurringDay} 
+                      onChange={(e) => { setRecurringDay(e.target.value); setFormErrors(prev => ({ ...prev, date: null })) }} 
+                      placeholder="Dia do vencimento" 
+                      className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`}
+                    />
+                  ) : (
+                    <input 
+                      type="date" 
+                      value={expenseDate} 
+                      onChange={(e) => { setExpenseDate(e.target.value); setFormErrors(prev => ({ ...prev, date: null })) }} 
+                      style={{ colorScheme: 'dark' }} 
+                      className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`}
+                    />
+                  )}
+                  {formErrors.date && <span className="text-xs font-medium text-rose-500">{formErrors.date}</span>}
                 </div>
-              )}
+              </div>
 
-              <button type="submit" disabled={isSaving} className="mt-2 w-full rounded-xl bg-cyan-500 py-4 font-bold text-white transition hover:bg-cyan-400">
-                {isSaving ? 'Salvando...' : 'Salvar'}
+              <button type="submit" disabled={isSaving} className="mt-4 w-full rounded-2xl bg-cyan-500 py-4 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50">
+                {isSaving ? 'Salvando...' : 'Confirmar Lançamento'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAIS DE CONFIRMAÇÃO/ERRO AQUI (mantive a lógica, adicione se necessário) */}
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeSettings} />
+          
+          <div className="relative w-full md:max-w-lg bg-slate-900 p-6 md:rounded-3xl rounded-t-3xl shadow-2xl transition-transform animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            
+            <div className="mx-auto mb-6 h-1 w-12 rounded-full bg-slate-700 md:hidden" />
+            
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">Configurações</h2>
+              <button onClick={closeSettings} className="text-slate-400 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-6">
+              {/* Seção de Perfil e Senha Integrados */}
+              <section>
+                <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <User size={16} /> Perfil
+                </h3>
+                <div className="bg-slate-950/50 rounded-2xl p-4 border border-white/5 flex flex-col gap-4">
+                  
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">E-mail conectado</p>
+                    <p className="text-sm font-medium text-white">{session?.user?.email || 'davisad'}</p>
+                  </div>
+                  
+                  <div className="h-px w-full bg-white/5" />
+
+                  <div>
+                    <p className="text-xs text-slate-400 mb-2">Senha</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-white tracking-[0.2em] mt-1">••••••••</p>
+                      <button 
+                        onClick={() => setIsChangingPassword(!isChangingPassword)} 
+                        className={`text-xs font-bold transition-colors ${isChangingPassword ? 'text-slate-400 hover:text-slate-300' : 'text-cyan-400 hover:text-cyan-300'}`}
+                      >
+                        {isChangingPassword ? 'Cancelar' : 'Alterar senha'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Formulário de Alterar Senha (Expansível) */}
+                  {isChangingPassword && (
+                    <form onSubmit={handleUpdatePassword} noValidate className="mt-2 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
+                      <input 
+                        type="password" 
+                        value={newPassword} 
+                        onChange={(e) => { setNewPassword(e.target.value); setPasswordError(''); setPasswordSuccess(''); }} 
+                        className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none border border-white/5 focus:border-cyan-500/50 transition-colors" 
+                        placeholder="Nova senha" 
+                      />
+                      <input 
+                        type="password" 
+                        value={confirmPassword} 
+                        onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(''); setPasswordSuccess(''); }} 
+                        className="w-full appearance-none rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none border border-white/5 focus:border-cyan-500/50 transition-colors" 
+                        placeholder="Confirmar nova senha" 
+                      />
+                      
+                      {passwordError && <span className="text-xs font-medium text-rose-500 px-1">{passwordError}</span>}
+                      {passwordSuccess && <span className="text-xs font-medium text-emerald-500 px-1">{passwordSuccess}</span>}
+
+                      <button type="submit" disabled={isUpdatingPassword} className="mt-1 w-full rounded-xl bg-cyan-500 hover:bg-cyan-400 py-3.5 text-sm font-bold text-white transition-colors disabled:opacity-50">
+                        {isUpdatingPassword ? 'Atualizando...' : 'Salvar nova senha'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </section>
+
+              {/* Seção de Dados (Exportar CSV) */}
+              <section>
+                <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <Download size={16} /> Dados
+                </h3>
+                <button 
+                  onClick={handleExportCSV} 
+                  className="w-full flex items-center justify-between bg-slate-950/50 hover:bg-slate-800 rounded-2xl p-4 border border-white/5 transition-colors group"
+                >
+                  <div className="flex flex-col items-start">
+                    <span className="text-sm font-medium text-white group-hover:text-cyan-400 transition-colors">Exportar Lançamentos</span>
+                    <span className="text-xs text-slate-400">Baixar histórico deste mês em .csv</span>
+                  </div>
+                  <Download size={18} className="text-slate-400 group-hover:text-cyan-400 transition-colors" />
+                </button>
+              </section>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmar Exclusão de Categoria */}
+      {categoryToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setCategoryToDelete(null)} />
+          <div className="relative w-full mx-4 max-w-sm rounded-3xl bg-slate-900 p-6 shadow-2xl animate-in zoom-in-95">
+            <h3 className="mb-2 text-xl font-bold text-white">Excluir categoria</h3>
+            <p className="mb-6 text-sm text-slate-300">
+              Tem certeza que deseja excluir <span className="font-bold text-white">"{categoryToDelete.name}"</span>?
+            </p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setCategoryToDelete(null)} className="flex-1 rounded-xl bg-slate-800 py-3 font-semibold text-white transition-colors hover:bg-slate-700">Cancelar</button>
+              <button type="button" onClick={executeDeleteCategory} disabled={isSaving} className="flex-1 rounded-xl bg-rose-500 py-3 font-bold text-white transition-all hover:bg-rose-600 disabled:opacity-50">
+                {isSaving ? 'Aguarde...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Erro Genérico */}
+      {errorMessage && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center sm:p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setErrorMessage('')} />
+          <div className="relative w-full mx-4 max-w-sm rounded-3xl bg-slate-900 p-6 shadow-2xl border border-rose-500/20 animate-in zoom-in-95">
+            <h3 className="mb-2 text-xl font-bold text-rose-500">Atenção</h3>
+            <p className="mb-6 text-sm text-slate-300 leading-relaxed">{errorMessage}</p>
+            <button type="button" onClick={() => setErrorMessage('')} className="w-full rounded-xl bg-slate-800 py-3 font-semibold text-white transition-colors hover:bg-slate-700">
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
