@@ -56,7 +56,7 @@ export default function Dashboard({ session }) {
   const [categories, setCategories] = useState([])
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterCategory] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
   
   // Modais de Controle
   const [showModal, setShowModal] = useState(false)
@@ -297,7 +297,7 @@ export default function Dashboard({ session }) {
 
   const filteredTransactions = transactions.filter(t => {
     const search = searchTerm.toLowerCase()
-    return (filterCategory ? t.category_id === filterCategory : true) && 
+    return (filterCategory ? String(t.category_id) === String(filterCategory) : true) && 
            (searchTerm ? t.description?.toLowerCase().includes(search) || t.categories?.name?.toLowerCase().includes(search) : true)
   })
 
@@ -391,10 +391,25 @@ export default function Dashboard({ session }) {
           {/* HISTORY SECTION */}
           <section className="w-full flex flex-col gap-4">
             <h3 className="text-lg font-bold text-white">Histórico</h3>
-            <div className="relative w-full">
-              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input type="text" placeholder="Buscar lançamento..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full appearance-none rounded-2xl border border-white/5 bg-slate-900/80 py-4 pl-12 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all" />
+            
+            <div className="flex flex-col sm:flex-row w-full gap-3">
+              <div className="relative flex-1">
+                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input type="text" placeholder="Buscar lançamento..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full appearance-none rounded-2xl border border-white/5 bg-slate-900/80 py-4 pl-12 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all" />
+              </div>
+              
+              <select 
+                value={filterCategory} 
+                onChange={(e) => setFilterCategory(e.target.value)} 
+                className="appearance-none rounded-2xl border border-white/5 bg-slate-900/80 px-4 py-4 text-sm text-white outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all sm:w-48 cursor-pointer"
+              >
+                <option value="">Todas as categorias</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
+
             <div className="flex flex-col w-full gap-3 overflow-y-auto max-h-[50vh] md:max-h-[400px] pr-2 custom-scrollbar">
               {filteredTransactions.length > 0 
                 ? filteredTransactions.map((t) => <TransactionItem key={t.id} t={t} onEdit={openEditModal} onDelete={handleDelete} />)

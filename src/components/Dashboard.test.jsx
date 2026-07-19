@@ -1,4 +1,4 @@
-import { render, screen, act, waitFor } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Dashboard from './Dashboard'
 import { vi } from 'vitest'
@@ -20,13 +20,25 @@ const createChainableMock = (table) => {
     eq: mockEq,
     then: (resolve) => {
       if (table === 'categories') {
-        resolve({ data: [{ id: Date.now(), name: 'Alimentação', type: 'expense' }], error: null })
+        resolve({ 
+          data: [
+            { id: 1, name: 'Alimentação', type: 'expense' },
+            { id: 2, name: 'Transporte', type: 'expense' }
+          ], 
+          error: null 
+        })
       } else if (table === 'expenses') {
         resolve({ 
-          data: [{ 
-            id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', 
-            category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false 
-          }], 
+          data: [
+            { 
+              id: 99, amount: 150.50, description: 'Conta de Luz', expense_date: '2026-07-15', 
+              category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false 
+            },
+            { 
+              id: 100, amount: 50.00, description: 'Uber', expense_date: '2026-07-16', 
+              category_id: 2, categories: { name: 'Transporte' }, type: 'expense', is_recurring: false 
+            }
+          ], 
           error: null 
         })
       } else {
@@ -52,10 +64,35 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
   it('deve renderizar a tela inicial com dados mockados', async () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
     
-    // Atualizado para os novos textos da interface (Nexo e Resumo do Mês)
     expect(screen.getByText('Nexo')).toBeInTheDocument()
     expect(screen.getByText('Resumo do Mês')).toBeInTheDocument()
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
+    expect(screen.getByText(/Uber/i)).toBeInTheDocument()
+  })
+
+  it('deve filtrar o histórico de lançamentos por categoria', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
+    expect(screen.getByText(/Uber/i)).toBeInTheDocument()
+
+    const filterSelect = screen.getAllByRole('combobox')[0]
+
+    // Filtra apenas por Alimentação
+    await user.selectOptions(filterSelect, 'Alimentação')
+    expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument() 
+    expect(screen.queryByText(/Uber/i)).not.toBeInTheDocument()   
+
+    // Filtra apenas por Transporte
+    await user.selectOptions(filterSelect, 'Transporte')
+    expect(screen.queryByText(/Conta de Luz/i)).not.toBeInTheDocument() 
+    expect(screen.getByText(/Uber/i)).toBeInTheDocument()               
+
+    // Limpa o filtro selecionando "Todas as categorias"
+    await user.selectOptions(filterSelect, 'Todas as categorias')
+    expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
+    expect(screen.getByText(/Uber/i)).toBeInTheDocument()
   })
 
   it('deve validar formulário de novo lançamento (vazio)', async () => {
@@ -87,7 +124,8 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    await user.click(await screen.findByTitle('Editar'))
+    // Conta de Luz agora é o segundo item da lista (índice 1) devido à data mais antiga
+    await user.click(screen.getAllByTitle('Editar')[1])
     expect(await screen.findByText('Editar Lançamento')).toBeInTheDocument()
 
     const amountInput = screen.getByPlaceholderText('0,00')
@@ -105,7 +143,8 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    await user.click(await screen.findByTitle('Excluir'))
+    // Conta de Luz agora é o segundo item da lista (índice 1) devido à data mais antiga
+    await user.click(screen.getAllByTitle('Excluir')[1])
     expect(mockDelete).toHaveBeenCalled()
     expect(mockEq).toHaveBeenCalledWith('id', 99)
   })
@@ -115,7 +154,10 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
     await user.click(document.querySelector('button.fixed.bottom-6'))
-    await user.selectOptions(screen.getByRole('combobox'), 'new') 
+    
+    const modalSelect = screen.getAllByRole('combobox')[1]
+    await user.selectOptions(modalSelect, 'new') 
+    
     await user.type(await screen.findByPlaceholderText('Nome da categoria'), 'Lazer')
     await user.click(screen.getByRole('button', { name: 'Criar' }))
 
@@ -129,12 +171,14 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(document.querySelector('button.fixed.bottom-6'))
     await user.type(screen.getByPlaceholderText('0,00'), '500')
 
-    const selectBox = screen.getByRole('combobox')
-    await user.selectOptions(selectBox, 'Alimentação') 
+    const modalSelect = screen.getAllByRole('combobox')[1]
+    await user.selectOptions(modalSelect, 'Alimentação') 
     
-    const dynamicCategoryId = screen.getByRole('option', { name: 'Alimentação' }).value
+    const selectedValue = modalSelect.value
     await user.click(screen.getByRole('button', { name: /Confirmar Lançamento/i }))
 
-    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ amount: 500, category_id: dynamicCategoryId, type: 'expense' })]))
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ amount: 500, category_id: selectedValue, type: 'expense' })
+    ]))
   })
 })
