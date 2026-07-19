@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 
 // --- CUSTOM HOOK PARA LÓGICA DE AUTENTICAÇÃO ---
@@ -14,6 +14,20 @@ function useAuthLogic() {
   const [successMessage, setSuccessMessage] = useState('')
   const [emailError, setEmailError] = useState('')       
   const [passwordError, setPasswordError] = useState('') 
+
+  // --- INTERCEPTA ERROS DE LINK EXPIRADO NA URL ---
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash && hash.includes('error_description')) {
+      if (hash.includes('invalid+or+has+expired') || hash.includes('Token+expired')) {
+        setErrorMessage('Este link de recuperação já foi utilizado ou expirou.')
+      } else {
+        setErrorMessage('Ocorreu um erro com o seu link de autenticação.')
+      }
+      // Limpa a URL para remover os códigos de erro e deixar o endereço limpo
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   const handleAuth = async (e) => {
     e.preventDefault()
@@ -208,7 +222,7 @@ export default function Auth() {
                   </span>
                 )}
                 
-                {/* O botão 'Esqueci a senha' foi movido para cá, abaixo do input */}
+                {/* Botão de Esqueci a senha */}
                 {mode === 'login' && (
                   <div className="mt-3 flex justify-end">
                     <button type="button" onClick={() => toggleMode('recovery')} className="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
