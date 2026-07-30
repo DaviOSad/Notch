@@ -510,8 +510,7 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     ]))
   })
 
-  // As duas datas contam meses a partir do mesmo ponto: mexer na inicial arrasta o
-  // fim junto enquanto um atalho de duração estiver escolhido.
+  // O fim é sempre data inicial + duração, então mexer na data inicial move o prazo.
   it('deve mover o prazo junto ao mudar a data inicial do recorrente', async () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
@@ -520,12 +519,31 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(screen.getByRole('checkbox'))
     await user.click(screen.getByRole('button', { name: '6x' }))
 
-    const [startInput, endInput] = document.querySelectorAll('input[type="date"]')
-    fireEvent.change(startInput, { target: { value: '2027-01-15' } })
+    fireEvent.change(document.querySelector('input[type="date"]'), { target: { value: '2027-01-15' } })
 
-    expect(endInput).toHaveValue('2027-06-30')
     expect(screen.getByText('6x — de Jan/2027 até Jun/2027.')).toBeInTheDocument()
     expect(screen.getByText('Repete todo dia 15, a partir de Jan/2027.')).toBeInTheDocument()
+  })
+
+  it('deve aceitar uma duração digitada em meses e gravar o fim correspondente', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    await user.type(screen.getByPlaceholderText('0,00'), '250')
+    await pickCategory(user, 1, /Alimentação/)
+    await user.click(screen.getByRole('checkbox'))
+
+    fireEvent.change(document.querySelector('input[type="date"]'), { target: { value: '2027-03-20' } })
+    await user.type(screen.getByPlaceholderText('Sem fim'), '10')
+
+    expect(screen.getByText('10x — de Mar/2027 até Dez/2027.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ expense_date: '2027-03-20', recurrence_end_date: '2027-12-31' })
+    ]))
   })
 
   it('deve manter o recorrente sem prazo quando a opção "Sem fim" está ativa', async () => {

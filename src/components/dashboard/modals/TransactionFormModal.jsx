@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import CategorySelect from '../CategorySelect'
 import { findCategory, sameId } from '../../../lib/categories'
-import { endOfMonthISO, monthsDiff, parseTransactionDate, shiftMonth, todayISO } from '../../../lib/dates'
+import { endOfMonthISO, parseTransactionDate, shiftMonth, todayISO } from '../../../lib/dates'
 import { blockInvalidChars } from '../../../lib/formatters'
 import { countOccurrences } from '../../../lib/recurrence'
 import { MONTHS_SHORT } from '../../../lib/constants'
@@ -11,6 +11,13 @@ import { MONTHS_SHORT } from '../../../lib/constants'
 const DURATION_SHORTCUTS = [3, 6, 12]
 
 const monthLabel = (year, month) => `${MONTHS_SHORT[month]}/${year}`
+
+// Campo vazio (ou lixo) = sem fim; o teto evita prazos absurdos digitados sem querer.
+const clampDuration = (value) => {
+  const months = Number.parseInt(value, 10)
+  if (!Number.isFinite(months) || months < 1) return null
+  return Math.min(months, 600)
+}
 
 // Modal multiuso: cria/edita despesa, receita e meta, alternando pelo `transactionType`.
 // O estado do formulário vive aqui e é descartado ao fechar (o modal desmonta).
