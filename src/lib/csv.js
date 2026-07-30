@@ -1,6 +1,6 @@
 import { UNCATEGORIZED_LABEL } from './constants'
 
-const HEADERS = ['Data', 'Categoria', 'Descricao', 'Tipo', 'Valor', 'Recorrente']
+const HEADERS = ['Data', 'Categoria', 'Descricao', 'Tipo', 'Valor', 'Recorrente', 'Recorrente Ate']
 
 export function buildTransactionsCsv(transactions, categories) {
   const rows = [HEADERS.join(',')]
@@ -8,7 +8,7 @@ export function buildTransactionsCsv(transactions, categories) {
   transactions.forEach((t) => {
     const catName = categories.find((c) => c.id === t.category_id)?.name || UNCATEGORIZED_LABEL
     rows.push(
-      `${t.expense_date},"${catName}","${t.description || ''}",${t.type === 'income' ? 'Receita' : 'Despesa'},${t.amount},${t.is_recurring ? 'Sim' : 'Nao'}`
+      `${t.expense_date},"${catName}","${t.description || ''}",${t.type === 'income' ? 'Receita' : 'Despesa'},${t.amount},${t.is_recurring ? 'Sim' : 'Nao'},${t.recurrence_end_date || ''}`
     )
   })
 

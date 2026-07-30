@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { getMonthBounds } from '../lib/dates'
-import { buildMonthTransactions } from '../lib/recurrence'
+import { buildMonthTransactions, computeAccumulatedBalance } from '../lib/recurrence'
 
 const byNameAsc = (a, b) => a.name.localeCompare(b.name)
 
@@ -20,6 +20,7 @@ const defaultCategoriesFor = (userId) => [
  */
 export function useFinanceData(session, currentDate) {
   const [transactions, setTransactions] = useState([])
+  const [accumulatedBalance, setAccumulatedBalance] = useState(0)
   const [categories, setCategories] = useState([])
   const [goals, setGoals] = useState([])
 
@@ -50,13 +51,16 @@ export function useFinanceData(session, currentDate) {
 
   const fetchTransactions = useCallback(async () => {
     const { endDate } = getMonthBounds(currentDate)
+    // `select('*')` de propósito: pedir colunas pelo nome faz a query inteira falhar
+    // (e o mês aparecer vazio) se o banco ainda não tiver alguma delas.
     const { data, error } = await supabase
       .from('expenses')
-      .select('id, amount, description, expense_date, category_id, type, is_recurring, created_at')
+      .select('*')
       .lte('expense_date', endDate)
 
     if (error) return console.error(error)
     setTransactions(buildMonthTransactions(data, currentDate))
+    setAccumulatedBalance(computeAccumulatedBalance(data, currentDate))
   }, [currentDate])
 
   useEffect(() => {
@@ -142,6 +146,7 @@ export function useFinanceData(session, currentDate) {
 
   return {
     transactions,
+    accumulatedBalance,
     categories,
     goals,
     fetchTransactions,

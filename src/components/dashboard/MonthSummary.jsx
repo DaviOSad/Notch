@@ -1,5 +1,7 @@
 import MonthNavigator from './MonthNavigator'
 import StatCard from './StatCard'
+import { MONTHS_SHORT } from '../../lib/constants'
+import { formatCurrency } from '../../lib/formatters'
 
 export default function MonthSummary({
   currentDate,
@@ -9,6 +11,7 @@ export default function MonthSummary({
   totalIncome,
   totalExpense,
   monthlyRemaining,
+  accumulatedBalance,
   filterType,
   onFilterTypeChange,
 }) {
@@ -30,6 +33,17 @@ export default function MonthSummary({
         <StatCard title="Receitas" amount={totalIncome} colorClass="bg-emerald-500/10" borderColor="border-emerald-500/10" textColor="text-emerald-400" ringColor="ring-emerald-400/60" isActive={filterType === 'income'} onClick={() => toggleType('income')} />
         <StatCard title="Despesas" amount={totalExpense} colorClass="bg-rose-500/10" borderColor="border-rose-500/10" textColor="text-rose-400" ringColor="ring-rose-400/60" isActive={filterType === 'expense'} onClick={() => toggleType('expense')} />
         <StatCard title="Restante (Mês)" amount={monthlyRemaining} colorClass="bg-cyan-500/10" borderColor="border-cyan-500/10" textColor="text-cyan-400" />
+      </div>
+
+      {/* Diferente dos cards acima, este não é do mês: arrasta todo o histórico. */}
+      <div className="mt-4 flex items-center justify-between gap-4 border-t border-white/5 pt-4">
+        <div className="flex min-w-0 flex-col">
+          <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 opacity-70">Saldo Acumulado</span>
+          <span className="text-[10px] sm:text-xs text-slate-500">Tudo até {MONTHS_SHORT[currentDate.getMonth()]}/{currentDate.getFullYear()}</span>
+        </div>
+        <span className={`shrink-0 text-lg sm:text-xl font-bold ${accumulatedBalance < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+          {formatCurrency(accumulatedBalance)}
+        </span>
       </div>
     </section>
   )

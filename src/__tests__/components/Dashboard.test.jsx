@@ -88,6 +88,15 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
   })
 
+  // O valor exato é coberto em __tests__/lib/recurrence.test.js; aqui basta garantir
+  // que o resumo mostra o acumulado e que ele não repete o restante do mês.
+  it('deve exibir o saldo acumulado no resumo do mês', async () => {
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    expect(screen.getByText('Saldo Acumulado')).toBeInTheDocument()
+    expect(screen.getByText(/^Tudo até /)).toBeInTheDocument()
+  })
+
   it('deve processar e exibir transações recorrentes de datas passadas', async () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
     expect(screen.getByText(/Internet Recorrente/i)).toBeInTheDocument()
@@ -470,7 +479,70 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(screen.getByRole('button', { name: 'Confirmar' }))
 
     expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ amount: 500, category_id: '1', type: 'expense' })
+      expect.objectContaining({ amount: 500, category_id: '1', type: 'expense', recurrence_end_date: null })
+    ]))
+  })
+
+  // Compra parcelada: recorrente com prazo de 6 meses a partir do mês visualizado.
+  it('deve gravar o prazo de um lançamento recorrente pelo atalho de duração', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    await user.type(screen.getByPlaceholderText('0,00'), '300')
+    await pickCategory(user, 1, /Alimentação/)
+
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: '6x' }))
+
+    // Último dia do 6º mês contado a partir do atual (o mês visualizado ao abrir).
+    const now = new Date()
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 6, 0)
+    const pad = (n) => String(n).padStart(2, '0')
+    const expectedEnd = `${lastDay.getFullYear()}-${pad(lastDay.getMonth() + 1)}-${pad(lastDay.getDate())}`
+
+    expect(screen.getByText(/^6x —/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ is_recurring: true, recurrence_end_date: expectedEnd })
+    ]))
+  })
+
+  // As duas datas contam meses a partir do mesmo ponto: mexer na inicial arrasta o
+  // fim junto enquanto um atalho de duração estiver escolhido.
+  it('deve mover o prazo junto ao mudar a data inicial do recorrente', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: '6x' }))
+
+    const [startInput, endInput] = document.querySelectorAll('input[type="date"]')
+    fireEvent.change(startInput, { target: { value: '2027-01-15' } })
+
+    expect(endInput).toHaveValue('2027-06-30')
+    expect(screen.getByText('6x — de Jan/2027 até Jun/2027.')).toBeInTheDocument()
+    expect(screen.getByText('Repete todo dia 15, a partir de Jan/2027.')).toBeInTheDocument()
+  })
+
+  it('deve manter o recorrente sem prazo quando a opção "Sem fim" está ativa', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    await user.type(screen.getByPlaceholderText('0,00'), '90')
+    await pickCategory(user, 1, /Alimentação/)
+    await user.click(screen.getByRole('checkbox'))
+
+    expect(screen.getByText('Repete todo mês, sem data para acabar.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ is_recurring: true, recurrence_end_date: null })
     ]))
   })
 })

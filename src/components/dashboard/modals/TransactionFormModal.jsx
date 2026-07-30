@@ -2,8 +2,15 @@ import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import CategorySelect from '../CategorySelect'
 import { findCategory, sameId } from '../../../lib/categories'
-import { buildISODate, todayISO } from '../../../lib/dates'
+import { endOfMonthISO, monthsDiff, parseTransactionDate, shiftMonth, todayISO } from '../../../lib/dates'
 import { blockInvalidChars } from '../../../lib/formatters'
+import { countOccurrences } from '../../../lib/recurrence'
+import { MONTHS_SHORT } from '../../../lib/constants'
+
+// Atalhos de duração para o caso mais comum: parcelas com número fixo de meses.
+const DURATION_SHORTCUTS = [3, 6, 12]
+
+const monthLabel = (year, month) => `${MONTHS_SHORT[month]}/${year}`
 
 // Modal multiuso: cria/edita despesa, receita e meta, alternando pelo `transactionType`.
 // O estado do formulário vive aqui e é descartado ao fechar (o modal desmonta).
@@ -26,14 +33,17 @@ export default function TransactionFormModal({
   const [description, setDescription] = useState(transactionToEdit?.description || '')
   const [categoryId, setCategoryId] = useState(transactionToEdit?.category_id || '')
   const [isRecurring, setIsRecurring] = useState(transactionToEdit?.is_recurring || false)
-  const [expenseDate, setExpenseDate] = useState(() =>
-    transactionToEdit && !transactionToEdit.is_recurring ? transactionToEdit.expense_date : todayISO()
-  )
-  const [recurringDay, setRecurringDay] = useState(() =>
-    transactionToEdit?.is_recurring
-      ? Number.parseInt(transactionToEdit.expense_date.split('-')[2], 10)
-      : new Date().getDate()
-  )
+  // Em recorrentes editados a data recebida é a ocorrência projetada no mês visto,
+  // então ela já traz o dia certo do vencimento.
+  const [expenseDate, setExpenseDate] = useState(transactionToEdit?.expense_date || todayISO())
+  // Duração da recorrência em meses; null = sem fim. A data final não é digitada:
+  // sai sempre de data inicial + duração (ver `recurrenceEnd` abaixo).
+  const [durationMonths, setDurationMonths] = useState(() => {
+    if (!transactionToEdit?.recurrence_end_date) return null
+    const start = parseTransactionDate(transactionToEdit.expense_date)
+    const months = countOccurrences(start.getFullYear(), start.getMonth(), transactionToEdit.recurrence_end_date)
+    return months > 0 ? months : null
+  })
 
   const [goalName, setGoalName] = useState('')
   const [goalTarget, setGoalTarget] = useState('')
@@ -49,6 +59,18 @@ export default function TransactionFormModal({
   const [isSaving, setIsSaving] = useState(false)
 
   const parentCategories = categories.filter((c) => !c.parent_id && c.type === transactionType)
+
+  // A recorrência começa na própria data do lançamento, e o prazo é contado a partir
+  // dela — mudar a data inicial move o fim junto, sem nada para ressincronizar.
+  // Com a data em branco, o mês visualizado serve de base só para a prévia.
+  const startDate = expenseDate ? parseTransactionDate(expenseDate) : currentDate
+  const startYear = startDate.getFullYear()
+  const startMonth = startDate.getMonth()
+  const dayOfMonth = expenseDate ? startDate.getDate() : null
+
+  // Último mês cobrado: a duração inclui o mês inicial (3 meses = mês atual + 2).
+  const lastMonth = durationMonths ? shiftMonth(startYear, startMonth, durationMonths - 1) : null
+  const recurrenceEnd = lastMonth ? endOfMonthISO(lastMonth.year, lastMonth.month) : ''
 
   // Se a categoria selecionada foi excluída no diálogo de confirmação, limpa a seleção.
   useEffect(() => {
@@ -127,16 +149,14 @@ export default function TransactionFormModal({
     const errors = {}
     if (!amount || Number(amount) <= 0) errors.amount = 'Preencha um valor maior que zero.'
     if (!isAddingCategory && !categoryId) errors.categoryId = 'Selecione uma categoria.'
-    if (isRecurring && (!recurringDay || recurringDay < 1 || recurringDay > 31)) errors.date = 'Preencha um dia válido (1 a 31).'
-    else if (!isRecurring && !expenseDate) errors.date = 'Preencha a data do lançamento.'
+    if (!expenseDate) errors.date = 'Preencha a data do lançamento.'
 
     if (Object.keys(errors).length > 0) return setFormErrors(errors)
     setFormErrors({})
 
-    // Recorrentes são ancorados no mês visualizado, guardando só o dia do vencimento.
-    const finalDate = isRecurring
-      ? buildISODate(currentDate.getFullYear(), currentDate.getMonth(), recurringDay)
-      : expenseDate
+    // Recorrente ou não, a data gravada é a escolhida: em recorrentes ela vira o
+    // início da série e o dia de vencimento das ocorrências seguintes.
+    const finalDate = expenseDate
 
     setIsSaving(true)
     const { error } = await saveTransaction({
@@ -147,6 +167,7 @@ export default function TransactionFormModal({
       expense_date: finalDate,
       type: transactionType,
       is_recurring: isRecurring,
+      recurrence_end_date: isRecurring && recurrenceEnd ? recurrenceEnd : null,
     }, transactionToEdit?.id)
     setIsSaving(false)
 
@@ -297,10 +318,56 @@ export default function TransactionFormModal({
                   <input type="checkbox" checked={isRecurring} onChange={(e) => { setIsRecurring(e.target.checked); clearFieldError('date') }} className="h-4 w-4 rounded accent-cyan-500" />
                   <span className="text-xs text-slate-400">Recorrente</span>
                 </label>
-                {isRecurring
-                  ? <input type="number" min="1" max="31" value={recurringDay} onChange={(e) => { setRecurringDay(e.target.value); clearFieldError('date') }} placeholder="Dia do vencimento" className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`} />
-                  : <input type="date" value={expenseDate} onChange={(e) => { setExpenseDate(e.target.value); clearFieldError('date') }} style={{ colorScheme: 'dark' }} className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`} />}
+                <input type="date" value={expenseDate} onChange={(e) => { setExpenseDate(e.target.value); clearFieldError('date') }} style={{ colorScheme: 'dark' }} className={`w-full appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none ${formErrors.date ? 'border border-rose-500' : ''}`} />
                 {formErrors.date && <span className="text-xs font-medium text-rose-500">{formErrors.date}</span>}
+                {isRecurring && dayOfMonth && (
+                  <span className="text-xs text-slate-500">
+                    Repete todo dia {dayOfMonth}, a partir de {monthLabel(startYear, startMonth)}.
+                  </span>
+                )}
+
+                {isRecurring && (
+                  <div className="mt-2 flex flex-col gap-3 rounded-xl border border-white/5 bg-slate-950/50 p-4">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Prazo (Opcional)</label>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDurationMonths(null)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${!durationMonths ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
+                      >
+                        Sem fim
+                      </button>
+                      {DURATION_SHORTCUTS.map((months) => (
+                        <button
+                          key={`duracao-${months}`}
+                          type="button"
+                          onClick={() => setDurationMonths(months)}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${durationMonths === months ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
+                        >
+                          {months}x
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative w-full">
+                      <input
+                        type="number" min="1" max="600" step="1" onKeyDown={blockInvalidChars}
+                        value={durationMonths ?? ''}
+                        onChange={(e) => setDurationMonths(clampDuration(e.target.value))}
+                        placeholder="Sem fim"
+                        className="w-full appearance-none rounded-xl bg-slate-900 py-3 pl-4 pr-20 text-sm text-white placeholder-slate-500 outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-500">meses</span>
+                    </div>
+
+                    <span className="text-xs text-slate-500">
+                      {durationMonths
+                        ? `${durationMonths}x — de ${monthLabel(startYear, startMonth)} até ${monthLabel(lastMonth.year, lastMonth.month)}.`
+                        : 'Repete todo mês, sem data para acabar.'}
+                    </span>
+                  </div>
+                )}
               </div>
             </>
           )}

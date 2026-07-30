@@ -53,6 +53,7 @@ export default function Dashboard({ session }) {
 
   const {
     transactions,
+    accumulatedBalance,
     categories,
     goals,
     fetchTransactions,
@@ -271,6 +272,7 @@ export default function Dashboard({ session }) {
           totalIncome={totalIncome}
           totalExpense={totalExpense}
           monthlyRemaining={monthlyRemaining}
+          accumulatedBalance={accumulatedBalance}
           filterType={filterType}
           onFilterTypeChange={setFilterType}
         />

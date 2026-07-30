@@ -63,6 +63,16 @@ CREATE POLICY "Acesso total as proprias categorias" ON categories FOR ALL USING 
 CREATE POLICY "Acesso total aos proprios gastos" ON expenses FOR ALL USING (auth.uid() = user_id);
 ```
 
+### Migrações
+
+Para bancos já existentes, rode no SQL Editor conforme forem sendo adicionadas.
+
+Prazo dos lançamentos recorrentes (último mês cobrado; `NULL` = repete sem fim):
+
+```sql
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS recurrence_end_date DATE;
+```
+
 ## GitHub Pages
 
 1. Ajuste `base` em `vite.config.js` para o nome exato do seu repositório.

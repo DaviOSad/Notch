@@ -17,6 +17,20 @@ export const lastDayOfMonth = (year, month) => new Date(year, month + 1, 0).getD
 export const buildISODate = (year, month, day) =>
   `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
+// Último dia do mês em ISO — usado como fim de recorrência, para a data gravada
+// cobrir o mês inteiro independentemente do dia do vencimento.
+export const endOfMonthISO = (year, month) => buildISODate(year, month, lastDayOfMonth(year, month))
+
+// Distância em meses entre dois pontos (o dia é irrelevante): negativa se `to` vem antes.
+export const monthsDiff = (fromYear, fromMonth, toYear, toMonth) =>
+  (toYear - fromYear) * 12 + (toMonth - fromMonth)
+
+// Mês/ano deslocados por N meses, normalizando a virada de ano.
+export const shiftMonth = (year, month, offset) => {
+  const shifted = new Date(year, month + offset, 1)
+  return { year: shifted.getFullYear(), month: shifted.getMonth() }
+}
+
 export const getMonthBounds = (date) => {
   const startDate = new Date(date.getFullYear(), date.getMonth(), 1)
   const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0)

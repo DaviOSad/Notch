@@ -6,6 +6,10 @@ import { formatCurrency } from '../../lib/formatters'
 export default function TransactionItem({ transaction, categories, onSelect, onEdit, onDelete }) {
   const t = transaction
 
+  const recurrenceLabel = t.recurrence_end_date
+    ? `Recorrente até ${formatShortDate(t.recurrence_end_date)}`
+    : 'Recorrente'
+
   // Editar/excluir não devem abrir os detalhes junto.
   const actionHandler = (action) => (e) => { e.stopPropagation(); action() }
 
@@ -33,11 +37,15 @@ export default function TransactionItem({ transaction, categories, onSelect, onE
             {t.description ? `${t.description} • ` : ''}
             {formatShortDate(t.expense_date)}
           </p>
-          {t.is_recurring && <Repeat size={12} className="text-cyan-500/70 shrink-0 ml-1" />}
+          {t.is_recurring && (
+            <span title={recurrenceLabel} className="flex shrink-0 items-center ml-1">
+              <Repeat size={12} className="text-cyan-500/70" />
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <span className={`text-base font-bold mr-1 ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-100'}`}>
+        <span className={`text-base font-bold mr-1 ${t.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
           {t.type === 'income' ? '+ ' : '- '}{formatCurrency(t.amount)}
         </span>
         <button onClick={actionHandler(() => onEdit(t))} className="text-slate-600 hover:text-cyan-500 transition-colors p-1" title="Editar"><Pencil size={18} /></button>

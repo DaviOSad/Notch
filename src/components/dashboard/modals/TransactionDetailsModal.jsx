@@ -37,7 +37,7 @@ export default function TransactionDetailsModal({ transaction, categories, onClo
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 opacity-70">
             {isIncome ? 'Receita' : 'Despesa'}
           </p>
-          <p className={`text-3xl font-bold ${isIncome ? 'text-emerald-400' : 'text-white'}`}>
+          <p className={`text-3xl font-bold ${isIncome ? 'text-emerald-400' : 'text-rose-400'}`}>
             {isIncome ? '+ ' : '- '}{formatCurrency(transaction.amount)}
           </p>
           {transaction.is_recurring && (
@@ -52,6 +52,14 @@ export default function TransactionDetailsModal({ transaction, categories, onClo
           {subcategoryName && <DetailRow label="Subcategoria" value={subcategoryName} />}
           <DetailRow label="Descrição" value={transaction.description || '—'} />
           <DetailRow label="Data" value={formatLongDate(transaction.expense_date)} />
+          {transaction.is_recurring && (
+            <DetailRow
+              label="Prazo"
+              value={transaction.recurrence_end_date
+                ? `Até ${formatLongDate(transaction.recurrence_end_date)}`
+                : 'Sem data para acabar'}
+            />
+          )}
         </dl>
 
         <button onClick={onEdit} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-500 py-4 text-base font-bold text-white transition-all active:scale-[0.98] hover:bg-cyan-400">
