@@ -341,6 +341,23 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     ]))
   })
 
+  // O id vindo do <select> é string e o do banco é número: a busca da categoria
+  // precisa comparar sem depender do tipo, senão o botão "Excluir" não faz nada.
+  it('deve abrir a confirmação ao excluir a categoria escolhida no formulário', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+
+    const selects = screen.getAllByRole('combobox')
+    fireEvent.change(selects[1], { target: { value: '1' } })
+
+    await user.click(screen.getByText('Excluir', { selector: 'button' }))
+
+    expect(await screen.findByText('Excluir categoria')).toBeInTheDocument()
+    expect(screen.getByText('"Alimentação"')).toBeInTheDocument()
+  })
+
   it('deve inserir um novo lançamento com sucesso', async () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
