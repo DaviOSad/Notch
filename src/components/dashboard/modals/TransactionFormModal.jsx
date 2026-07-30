@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import CategoryOptionGroups from '../CategoryOptionGroups'
+import CategorySelect from '../CategorySelect'
 import { findCategory, sameId } from '../../../lib/categories'
 import { buildISODate, todayISO } from '../../../lib/dates'
 import { blockInvalidChars } from '../../../lib/formatters'
@@ -255,16 +255,17 @@ export default function TransactionFormModal({
                 ) : (
                   <div className="flex flex-col gap-1 w-full">
                     <div className="flex gap-2 w-full">
-                      <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); clearFieldError('categoryId') }} className={`flex-1 appearance-none rounded-xl bg-slate-950 px-4 py-3.5 text-sm text-white outline-none focus:ring-1 focus:ring-cyan-500 ${formErrors.categoryId ? 'border border-rose-500' : ''}`}>
-                        <option value="" disabled>Selecione...</option>
-                        <CategoryOptionGroups
-                          categories={categories}
-                          parents={parentCategories}
-                          type={transactionType}
-                          keyPrefix="opt"
-                          mainOptionClassName="text-white font-semibold"
-                        />
-                      </select>
+                      <CategorySelect
+                        categories={categories}
+                        parents={parentCategories}
+                        type={transactionType}
+                        value={categoryId}
+                        onChange={(id) => { setCategoryId(id); clearFieldError('categoryId') }}
+                        placeholder="Selecione..."
+                        parentHint="Geral"
+                        hasError={Boolean(formErrors.categoryId)}
+                        className="flex-1 min-w-0"
+                      />
 
                       <div className="relative group shrink-0">
                         <button

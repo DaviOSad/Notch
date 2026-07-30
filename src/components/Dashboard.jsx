@@ -36,6 +36,7 @@ export default function Dashboard({ session }) {
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [filterType, setFilterType] = useState('') // '' | 'income' | 'expense'
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   const [showModal, setShowModal] = useState(false)
@@ -70,7 +71,7 @@ export default function Dashboard({ session }) {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [currentDate, filterCategory, searchTerm])
+  }, [currentDate, filterCategory, filterType, searchTerm])
 
   useBodyScrollLock(
     Boolean(showModal || showSettings || showMonthPicker || categoryToDelete || goalToDelete || errorMessage || fundingGoal || transactionDetails)
@@ -103,6 +104,7 @@ export default function Dashboard({ session }) {
   }, [transactions, categories])
 
   const filteredTransactions = transactions.filter((t) => {
+    if (filterType && (filterType === 'income' ? t.type !== 'income' : !isExpense(t))) return false
     if (!matchesCategoryFilter(t, categories, filterCategory)) return false
     if (!searchTerm) return true
 
@@ -269,6 +271,8 @@ export default function Dashboard({ session }) {
           totalIncome={totalIncome}
           totalExpense={totalExpense}
           monthlyRemaining={monthlyRemaining}
+          filterType={filterType}
+          onFilterTypeChange={setFilterType}
         />
 
         <GoalsCarousel
@@ -290,6 +294,8 @@ export default function Dashboard({ session }) {
             onSearchChange={setSearchTerm}
             filterCategory={filterCategory}
             onFilterChange={setFilterCategory}
+            filterType={filterType}
+            onFilterTypeChange={setFilterType}
             onSelect={setTransactionDetails}
             onEdit={openEditModal}
             onDelete={handleDeleteTransaction}

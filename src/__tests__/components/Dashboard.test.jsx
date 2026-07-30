@@ -74,6 +74,13 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
 
   beforeEach(() => { vi.clearAllMocks() })
 
+  // O seletor de categorias é um dropdown próprio (não um <select> nativo): abre ao
+  // clicar no combobox e a opção é escolhida clicando na linha da lista.
+  const pickCategory = async (user, comboboxIndex, optionName) => {
+    await user.click(screen.getAllByRole('combobox')[comboboxIndex])
+    await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: optionName }))
+  }
+
   // --- 1. RENDERIZAÇÃO E HISTÓRICO ---
   it('deve renderizar a tela inicial com dados mockados', async () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
@@ -99,9 +106,8 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     const user = userEvent.setup()
     await act(async () => { render(<Dashboard session={mockSession} />) })
 
-    const filterSelect = screen.getAllByRole('combobox')[0]
-    await user.selectOptions(filterSelect, '1') 
-    expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument() 
+    await pickCategory(user, 0, /Alimentação/)
+    expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
     expect(screen.queryByText(/Uber/i)).not.toBeInTheDocument()   
   })
 
@@ -406,7 +412,37 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     ]))
   })
 
-  // O id vindo do <select> é string e o do banco é número: a busca da categoria
+  // --- 4.1 SELETOR DE CATEGORIAS ---
+  it('deve permitir escolher uma subcategoria no seletor de categorias', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    await user.type(screen.getByPlaceholderText('0,00'), '80')
+
+    await pickCategory(user, 1, /Almoço/)
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ category_id: '4' })
+    ]))
+  })
+
+  it('deve fechar o seletor de categorias com Escape sem escolher nada', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    const trigger = screen.getAllByRole('combobox')[0]
+    await user.click(trigger)
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(trigger).toHaveTextContent('Todas as categorias')
+  })
+
+  // O id vindo do seletor é string e o do banco é número: a busca da categoria
   // precisa comparar sem depender do tipo, senão o botão "Excluir" não faz nada.
   it('deve abrir a confirmação ao excluir a categoria escolhida no formulário', async () => {
     const user = userEvent.setup()
@@ -414,8 +450,7 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
 
     await user.click(document.querySelector('button.fixed.bottom-6'))
 
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[1], { target: { value: '1' } })
+    await pickCategory(user, 1, /Alimentação/)
 
     await user.click(screen.getByText('Excluir', { selector: 'button' }))
 
@@ -430,9 +465,8 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.click(document.querySelector('button.fixed.bottom-6'))
     await user.type(screen.getByPlaceholderText('0,00'), '500')
 
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[1], { target: { value: '1' } })
-    
+    await pickCategory(user, 1, /Alimentação/)
+
     await user.click(screen.getByRole('button', { name: 'Confirmar' }))
 
     expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
