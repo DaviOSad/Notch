@@ -1,4 +1,4 @@
-import { render, screen, act, fireEvent } from '@testing-library/react'
+import { render, screen, act, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Dashboard from '../../components/Dashboard'
 import { vi } from 'vitest'
@@ -10,7 +10,8 @@ const mockEq = vi.fn(function() { return this })
 
 const dummyTransactions = Array.from({ length: 14 }).map((_, i) => ({
   id: 101 + i, amount: 10, description: `Dummy ${i}`, expense_date: '2026-07-01',
-  category_id: 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false, created_at: '2026-07-01T10:00:00Z'
+  // O primeiro usa a subcategoria (4 = Almoço), para cobrir o caminho "pai ↳ filha".
+  category_id: i === 0 ? 4 : 1, categories: { name: 'Alimentação' }, type: 'expense', is_recurring: false, created_at: '2026-07-01T10:00:00Z'
 }))
 
 const createChainableMock = (table) => {
@@ -29,8 +30,9 @@ const createChainableMock = (table) => {
           data: [
             { id: 1, name: 'Alimentação', type: 'expense', parent_id: null },
             { id: 2, name: 'Transporte', type: 'expense', parent_id: null },
-            { id: 3, name: 'Serviços', type: 'expense', parent_id: null }
-          ], 
+            { id: 3, name: 'Serviços', type: 'expense', parent_id: null },
+            { id: 4, name: 'Almoço', type: 'expense', parent_id: 1 }
+          ],
           error: null 
         })
       } else if (table === 'expenses') {
@@ -101,6 +103,69 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     await user.selectOptions(filterSelect, '1') 
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument() 
     expect(screen.queryByText(/Uber/i)).not.toBeInTheDocument()   
+  })
+
+  // --- 1.1 DETALHES DO LANÇAMENTO ---
+  const openDetailsOf = async (user, text) => {
+    await user.click(screen.getByText(text).closest('[role="button"]'))
+    return screen.findByTestId('transaction-details')
+  }
+
+  it('deve abrir os detalhes ao clicar em um lançamento', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    const panel = await openDetailsOf(user, /Conta de Luz/)
+
+    expect(within(panel).getByText('Alimentação')).toBeInTheDocument()
+    expect(within(panel).getByText('Conta de Luz')).toBeInTheDocument()
+    expect(within(panel).getByText('15 de julho de 2026')).toBeInTheDocument()
+    expect(within(panel).getByText('- R$ 150,50')).toBeInTheDocument()
+    // Categoria raiz não deve exibir a linha de subcategoria.
+    expect(within(panel).queryByText('Subcategoria')).not.toBeInTheDocument()
+  })
+
+  it('deve exibir categoria e subcategoria separadamente nos detalhes', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    const panel = await openDetailsOf(user, /Dummy 0/)
+
+    expect(within(panel).getByText('Subcategoria')).toBeInTheDocument()
+    expect(within(panel).getByText('Alimentação')).toBeInTheDocument()
+    expect(within(panel).getByText('Almoço')).toBeInTheDocument()
+  })
+
+  it('deve sinalizar nos detalhes que o lançamento é recorrente', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    const panel = await openDetailsOf(user, /Internet Recorrente/)
+
+    expect(within(panel).getByText('Recorrente')).toBeInTheDocument()
+    expect(within(panel).getByText('Internet Recorrente')).toBeInTheDocument()
+  })
+
+  it('não deve abrir os detalhes ao clicar nos botões de ação da linha', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(screen.getAllByTitle('Editar')[1])
+
+    expect(await screen.findByText('Editar Lançamento')).toBeInTheDocument()
+    expect(screen.queryByTestId('transaction-details')).not.toBeInTheDocument()
+  })
+
+  it('deve ir dos detalhes para o formulário de edição', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    const panel = await openDetailsOf(user, /Conta de Luz/)
+    await user.click(within(panel).getByRole('button', { name: 'Editar' }))
+
+    expect(await screen.findByText('Editar Lançamento')).toBeInTheDocument()
+    expect(screen.queryByTestId('transaction-details')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('0,00')).toHaveValue(150.5)
   })
 
   // --- 2. METAS (CAIXINHAS) ---

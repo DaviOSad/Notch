@@ -24,6 +24,7 @@ import GoalsCarousel from './dashboard/GoalsCarousel'
 import ExpensesChart from './dashboard/ExpensesChart'
 import TransactionHistory from './dashboard/TransactionHistory'
 import TransactionFormModal from './dashboard/modals/TransactionFormModal'
+import TransactionDetailsModal from './dashboard/modals/TransactionDetailsModal'
 import FundGoalModal from './dashboard/modals/FundGoalModal'
 import SettingsModal from './dashboard/modals/SettingsModal'
 import ConfirmDialog from './dashboard/modals/ConfirmDialog'
@@ -41,6 +42,7 @@ export default function Dashboard({ session }) {
   const [showSettings, setShowSettings] = useState(false)
   const [showMonthPicker, setShowMonthPicker] = useState(false)
   const [transactionToEdit, setTransactionToEdit] = useState(null)
+  const [transactionDetails, setTransactionDetails] = useState(null)
   const [categoryToDelete, setCategoryToDelete] = useState(null)
   const [goalToDelete, setGoalToDelete] = useState(null)
   const [fundingGoal, setFundingGoal] = useState(null)
@@ -71,7 +73,7 @@ export default function Dashboard({ session }) {
   }, [currentDate, filterCategory, searchTerm])
 
   useBodyScrollLock(
-    Boolean(showModal || showSettings || showMonthPicker || categoryToDelete || goalToDelete || errorMessage || fundingGoal)
+    Boolean(showModal || showSettings || showMonthPicker || categoryToDelete || goalToDelete || errorMessage || fundingGoal || transactionDetails)
   )
 
   // --- DERIVADOS ---
@@ -121,6 +123,13 @@ export default function Dashboard({ session }) {
   const openEditModal = (transaction) => {
     setTransactionToEdit(transaction)
     setShowModal(true)
+  }
+
+  // "Editar" dentro dos detalhes: troca a ficha de leitura pelo formulário.
+  const editFromDetails = () => {
+    const transaction = transactionDetails
+    setTransactionDetails(null)
+    openEditModal(transaction)
   }
 
   const handleDeleteTransaction = async (id) => {
@@ -281,6 +290,7 @@ export default function Dashboard({ session }) {
             onSearchChange={setSearchTerm}
             filterCategory={filterCategory}
             onFilterChange={setFilterCategory}
+            onSelect={setTransactionDetails}
             onEdit={openEditModal}
             onDelete={handleDeleteTransaction}
           />
@@ -288,6 +298,15 @@ export default function Dashboard({ session }) {
       </div>
 
       <button onClick={() => setShowModal(true)} className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 transition-transform active:scale-90 md:bottom-10 md:right-10"><Plus size={28} /></button>
+
+      {transactionDetails && (
+        <TransactionDetailsModal
+          transaction={transactionDetails}
+          categories={categories}
+          onClose={() => setTransactionDetails(null)}
+          onEdit={editFromDetails}
+        />
+      )}
 
       {fundingGoal && (
         <FundGoalModal

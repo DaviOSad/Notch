@@ -13,6 +13,7 @@ export default function TransactionHistory({
   onSearchChange,
   filterCategory,
   onFilterChange,
+  onSelect,
   onEdit,
   onDelete,
 }) {
@@ -32,7 +33,7 @@ export default function TransactionHistory({
       <div className="flex flex-col w-full gap-3 overflow-y-auto max-h-[50vh] md:max-h-[400px] pr-2 custom-scrollbar">
         {visibleTransactions.length > 0
           ? visibleTransactions.map((t, idx) => (
-            <TransactionItem key={`tx-${t.id}-${idx}`} transaction={t} categories={categories} onEdit={onEdit} onDelete={onDelete} />
+            <TransactionItem key={`tx-${t.id}-${idx}`} transaction={t} categories={categories} onSelect={onSelect} onEdit={onEdit} onDelete={onDelete} />
           ))
           : <div className="py-8 text-center text-sm text-slate-500">Nenhuma movimentação.</div>}
         {visibleCount < totalCount && (
