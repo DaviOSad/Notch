@@ -75,7 +75,10 @@ ALTER TABLE expenses ADD COLUMN IF NOT EXISTS recurrence_end_date DATE;
 
 Autoexclusão de conta (o cliente nunca tem a service role key, então a exclusão do
 usuário em `auth.users` precisa passar por uma função `SECURITY DEFINER`; `SET search_path`
-evita sequestro de search_path nesse tipo de função):
+evita sequestro de search_path nesse tipo de função). O Supabase concede EXECUTE em toda
+função nova do schema `public` a `anon`/`authenticated`/`service_role` por padrão (via
+`ALTER DEFAULT PRIVILEGES`), então é preciso revogar de `anon` explicitamente — revogar só
+de `PUBLIC` não é suficiente:
 
 ```sql
 CREATE OR REPLACE FUNCTION delete_own_account()
@@ -92,6 +95,8 @@ BEGIN
 END;
 $$;
 
+REVOKE EXECUTE ON FUNCTION delete_own_account() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION delete_own_account() FROM anon;
 GRANT EXECUTE ON FUNCTION delete_own_account() TO authenticated;
 ```
 

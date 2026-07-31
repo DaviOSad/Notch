@@ -72,7 +72,9 @@ function useAuthLogic() {
       })
 
       if (error) {
-        setErrorMessage('Ocorreu um erro ao tentar enviar o email.')
+        setErrorMessage(error.status === 429
+          ? 'Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.'
+          : 'Ocorreu um erro ao tentar enviar o email.')
       } else {
         setSuccessMessage('Email de recuperação enviado! Verifique sua caixa de entrada.')
       }
@@ -89,7 +91,9 @@ function useAuthLogic() {
         })
 
     if (error) {
-      if (error.message.includes('Invalid login credentials')) {
+      if (error.status === 429) {
+        setErrorMessage('Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.')
+      } else if (error.message.includes('Invalid login credentials')) {
         setErrorMessage('Email ou senha incorretos.')
       } else if (error.message.includes('User already registered')) {
         setErrorMessage('Este email já está cadastrado.')

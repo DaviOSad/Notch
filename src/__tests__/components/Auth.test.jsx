@@ -100,6 +100,29 @@ describe('Auth Component', () => {
     expect(await screen.findByText(/Email de recuperação enviado/i)).toBeInTheDocument()
   })
 
+  it('deve exibir mensagem de limite de tentativas ao receber erro 429 no cadastro', async () => {
+    const user = userEvent.setup()
+    supabase.auth.signUp.mockResolvedValueOnce({ data: null, error: { status: 429, message: 'Email rate limit exceeded' } })
+    render(<Auth />)
+    await user.click(screen.getByRole('button', { name: /Não tem conta\?/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar' })).toBeInTheDocument())
+    await user.type(screen.getByLabelText(/Email/i), 'teste@email.com')
+    await user.type(screen.getByLabelText(/Senha/i), 'senha123')
+    await user.click(screen.getByRole('button', { name: 'Cadastrar' }))
+    expect(await screen.findByText(/Muitas tentativas em pouco tempo/i)).toBeInTheDocument()
+  })
+
+  it('deve exibir mensagem de limite de tentativas ao receber erro 429 na recuperação de senha', async () => {
+    const user = userEvent.setup()
+    supabase.auth.resetPasswordForEmail.mockResolvedValueOnce({ error: { status: 429, message: 'Email rate limit exceeded' } })
+    render(<Auth />)
+    await user.click(screen.getByRole('button', { name: /Esqueci a senha/i }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: /Recuperar senha/i })).toBeInTheDocument())
+    await user.type(screen.getByLabelText(/Email/i), 'teste@email.com')
+    await user.click(screen.getByRole('button', { name: 'Enviar link de recuperação' }))
+    expect(await screen.findByText(/Muitas tentativas em pouco tempo/i)).toBeInTheDocument()
+  })
+
   it('deve interceptar a URL e exibir erro de link expirado', async () => {
     window.location.hash = '#error_description=Email+link+is+invalid+or+has+expired'
     render(<Auth />)
