@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 
+// window.location.origin não inclui o path do GitHub Pages (/Finances-Dashboard/);
+// sem o BASE_URL o link do email cai na raiz do domínio e dá 404.
+const authRedirectUrl = window.location.origin + import.meta.env.BASE_URL
+
 // --- CUSTOM HOOK PARA LÓGICA DE AUTENTICAÇÃO ---
 function useAuthLogic() {
   const [loading, setLoading] = useState(false)
@@ -64,7 +68,7 @@ function useAuthLogic() {
     
     if (mode === 'recovery') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin, 
+        redirectTo: authRedirectUrl,
       })
 
       if (error) {
@@ -76,9 +80,13 @@ function useAuthLogic() {
       return
     }
 
-    const { data, error } = mode === 'login' 
+    const { data, error } = mode === 'login'
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: authRedirectUrl },
+        })
 
     if (error) {
       if (error.message.includes('Invalid login credentials')) {

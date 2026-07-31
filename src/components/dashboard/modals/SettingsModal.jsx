@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Download, User, X } from 'lucide-react'
+import { Download, Trash2, User, X } from 'lucide-react'
 import { supabase } from '../../../supabaseClient'
+import ConfirmDialog from './ConfirmDialog'
+import ErrorDialog from './ErrorDialog'
 
 export default function SettingsModal({ session, onClose, onExportCSV }) {
   const [isChangingPassword, setIsChangingPassword] = useState(false)
@@ -10,7 +12,27 @@ export default function SettingsModal({ session, onClose, onExportCSV }) {
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
   const clearPasswordFeedback = () => { setPasswordError(''); setPasswordSuccess('') }
+
+  // A conta e todos os dados são apagados por uma função no banco (SECURITY DEFINER),
+  // pois o cliente nunca tem a service role key para chamar supabase.auth.admin.deleteUser.
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true)
+    const { error } = await supabase.rpc('delete_own_account')
+
+    if (error) {
+      setIsDeletingAccount(false)
+      setShowDeleteConfirm(false)
+      setDeleteError('Erro ao excluir conta: ' + error.message)
+      return
+    }
+
+    await supabase.auth.signOut()
+  }
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault()
@@ -70,8 +92,28 @@ export default function SettingsModal({ session, onClose, onExportCSV }) {
               <Download size={18} className="text-slate-400 group-hover:text-cyan-400 transition-colors" />
             </button>
           </section>
+          <section>
+            <h3 className="text-xs font-bold text-rose-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Trash2 size={16} /> Zona de perigo</h3>
+            <button onClick={() => setShowDeleteConfirm(true)} className="w-full flex items-center justify-between bg-slate-950/50 hover:bg-rose-500/10 rounded-2xl p-4 border border-rose-500/20 transition-colors group">
+              <div className="flex flex-col items-start"><span className="text-sm font-medium text-rose-400">Excluir conta</span><span className="text-xs text-slate-400">Remove sua conta e todos os dados permanentemente</span></div>
+              <Trash2 size={18} className="text-rose-400" />
+            </button>
+          </section>
         </div>
       </div>
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Excluir conta"
+          message={<>Tem certeza que deseja excluir sua conta? Todos os seus lançamentos, categorias e metas serão apagados <span className="font-bold text-white">permanentemente</span>. Esta ação não pode ser desfeita.</>}
+          isBusy={isDeletingAccount}
+          confirmLabel="Excluir conta"
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={handleDeleteAccount}
+        />
+      )}
+
+      {deleteError && <ErrorDialog message={deleteError} onClose={() => setDeleteError('')} />}
     </div>
   )
 }

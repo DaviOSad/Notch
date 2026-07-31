@@ -73,6 +73,28 @@ Prazo dos lançamentos recorrentes (último mês cobrado; `NULL` = repete sem fi
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS recurrence_end_date DATE;
 ```
 
+Autoexclusão de conta (o cliente nunca tem a service role key, então a exclusão do
+usuário em `auth.users` precisa passar por uma função `SECURITY DEFINER`; `SET search_path`
+evita sequestro de search_path nesse tipo de função):
+
+```sql
+CREATE OR REPLACE FUNCTION delete_own_account()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+	DELETE FROM expenses WHERE user_id = auth.uid();
+	DELETE FROM goals WHERE user_id = auth.uid();
+	DELETE FROM categories WHERE user_id = auth.uid();
+	DELETE FROM auth.users WHERE id = auth.uid();
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION delete_own_account() TO authenticated;
+```
+
 ## GitHub Pages
 
 1. Ajuste `base` em `vite.config.js` para o nome exato do seu repositório.
