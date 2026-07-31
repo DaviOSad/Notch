@@ -21,9 +21,8 @@ describe('SettingsModal - Exclusão de conta', () => {
     vi.clearAllMocks()
   })
 
-  it('deve exibir a zona de perigo com o botão de excluir conta', () => {
+  it('deve exibir o botão de excluir conta', () => {
     render(<SettingsModal session={session} onClose={vi.fn()} onExportCSV={vi.fn()} />)
-    expect(screen.getByText('Zona de perigo')).toBeInTheDocument()
     expect(screen.getByText('Excluir conta')).toBeInTheDocument()
   })
 

@@ -93,7 +93,6 @@ export default function SettingsModal({ session, onClose, onExportCSV }) {
             </button>
           </section>
           <section>
-            <h3 className="text-xs font-bold text-rose-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Trash2 size={16} /> Zona de perigo</h3>
             <button onClick={() => setShowDeleteConfirm(true)} className="w-full flex items-center justify-between bg-slate-950/50 hover:bg-rose-500/10 rounded-2xl p-4 border border-rose-500/20 transition-colors group">
               <div className="flex flex-col items-start"><span className="text-sm font-medium text-rose-400">Excluir conta</span><span className="text-xs text-slate-400">Remove sua conta e todos os dados permanentemente</span></div>
               <Trash2 size={18} className="text-rose-400" />
