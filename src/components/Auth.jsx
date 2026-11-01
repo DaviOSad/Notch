@@ -14,7 +14,9 @@ function useAuthLogic() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [confirmError, setConfirmError] = useState('')
+
   const [mode, setMode] = useState('login') 
   const [isAnimating, setIsAnimating] = useState(false)
   
@@ -61,6 +63,15 @@ function useAuthLogic() {
         hasValidationErrors = true
       } else {
         setPasswordError('')
+      }
+    }
+
+    if (mode === 'register') {
+      if (confirmPassword !== password) {
+        setConfirmError('As senhas não coincidem.')
+        hasValidationErrors = true
+      } else {
+        setConfirmError('')
       }
     }
 
@@ -117,8 +128,9 @@ function useAuthLogic() {
       setSuccessMessage('Conta criada com sucesso! Verifique seu email.')
       setEmail('')
       setPassword('')
+      setConfirmPassword('')
     }
-    
+
     setLoading(false)
   }
 
@@ -129,9 +141,11 @@ function useAuthLogic() {
       setErrorMessage('')
       setSuccessMessage('')
       setEmailError('')    
-      setPasswordError('') 
+      setPasswordError('')
+      setConfirmError('')
       setEmail('')
       setPassword('')
+      setConfirmPassword('')
       setIsAnimating(false)
     }, 300)
   }
@@ -140,6 +154,7 @@ function useAuthLogic() {
     loading, email, setEmail, password, setPassword,
     mode, isAnimating, errorMessage, successMessage,
     emailError, setEmailError, passwordError, setPasswordError,
+    confirmPassword, setConfirmPassword, confirmError, setConfirmError,
     handleAuth, toggleMode
   }
 }
@@ -168,6 +183,7 @@ export default function Auth() {
     loading, email, setEmail, password, setPassword,
     mode, isAnimating, errorMessage, successMessage,
     emailError, setEmailError, passwordError, setPasswordError,
+    confirmPassword, setConfirmPassword, confirmError, setConfirmError,
     handleAuth, toggleMode
   } = useAuthLogic()
 
@@ -237,6 +253,22 @@ export default function Auth() {
                 </button>
               )}
             </div>
+          )}
+
+          {mode === 'register' && (
+            <Field
+              label="Confirmar senha"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value)
+                if (confirmError) setConfirmError('')
+              }}
+              error={confirmError}
+              placeholder="••••••••"
+              required
+            />
           )}
 
           <button type="submit" disabled={loading || isAnimating} className="btn-destaque mt-1 py-3.5 text-base">

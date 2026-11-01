@@ -25,7 +25,7 @@ describe('Auth Component', () => {
     expect(screen.getByRole('heading', { name: /Entrar no sistema/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument()
     expect(screen.getByLabelText(/Email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Senha/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Senha')).toBeInTheDocument()
   })
 
   it('deve alternar para o formulário de cadastro após a animação', async () => {
@@ -43,7 +43,7 @@ describe('Auth Component', () => {
     supabase.auth.signInWithPassword.mockResolvedValueOnce({ error: { message: 'Invalid login credentials' } })
     render(<Auth />)
     await user.type(screen.getByLabelText(/Email/i), 'teste@email.com')
-    await user.type(screen.getByLabelText(/Senha/i), 'senha123')
+    await user.type(screen.getByLabelText('Senha'), 'senha123')
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
     expect(await screen.findByText(/Email ou senha incorretos/i)).toBeInTheDocument()
   })
@@ -55,7 +55,8 @@ describe('Auth Component', () => {
     await user.click(screen.getByRole('button', { name: /Não tem conta\?/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar' })).toBeInTheDocument())
     await user.type(screen.getByLabelText(/Email/i), 'novo@email.com')
-    await user.type(screen.getByLabelText(/Senha/i), 'senha123')
+    await user.type(screen.getByLabelText('Senha'), 'senha123')
+    await user.type(screen.getByLabelText('Confirmar senha'), 'senha123')
     await user.click(screen.getByRole('button', { name: 'Cadastrar' }))
     expect(await screen.findByText(/Conta criada com sucesso/i)).toBeInTheDocument()
   })
@@ -67,7 +68,8 @@ describe('Auth Component', () => {
     await user.click(screen.getByRole('button', { name: /Não tem conta\?/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar' })).toBeInTheDocument())
     await user.type(screen.getByLabelText(/Email/i), 'existe@email.com')
-    await user.type(screen.getByLabelText(/Senha/i), 'senha123')
+    await user.type(screen.getByLabelText('Senha'), 'senha123')
+    await user.type(screen.getByLabelText('Confirmar senha'), 'senha123')
     await user.click(screen.getByRole('button', { name: 'Cadastrar' }))
     expect(await screen.findByText(/Este email já está cadastrado/i)).toBeInTheDocument()
   })
@@ -78,7 +80,7 @@ describe('Auth Component', () => {
     await user.click(screen.getByRole('button', { name: /Não tem conta\?/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar' })).toBeInTheDocument())
     await user.type(screen.getByLabelText(/Email/i), 'teste@email.com')
-    await user.type(screen.getByLabelText(/Senha/i), '1234567') // 7 caracteres
+    await user.type(screen.getByLabelText('Senha'), '1234567') // 7 caracteres
     await user.click(screen.getByRole('button', { name: 'Cadastrar' }))
     expect(await screen.findByText(/A senha deve ter pelo menos 8 caracteres/i)).toBeInTheDocument()
   })
@@ -91,13 +93,37 @@ describe('Auth Component', () => {
     await user.click(screen.getByRole('button', { name: /Esqueci a senha/i }))
     await waitFor(() => expect(screen.getByRole('heading', { name: /Recuperar senha/i })).toBeInTheDocument())
     
-    expect(screen.queryByLabelText(/Senha/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Senha')).not.toBeInTheDocument()
     
     await user.type(screen.getByLabelText(/Email/i), 'teste@email.com')
     await user.click(screen.getByRole('button', { name: 'Enviar link de recuperação' }))
     
     expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith('teste@email.com', expect.any(Object))
     expect(await screen.findByText(/Email de recuperação enviado/i)).toBeInTheDocument()
+  })
+
+  it('deve bloquear o cadastro quando as senhas não coincidem', async () => {
+    const user = userEvent.setup()
+    render(<Auth />)
+    await user.click(screen.getByRole('button', { name: /Não tem conta\?/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar' })).toBeInTheDocument())
+    await user.type(screen.getByLabelText(/Email/i), 'teste@email.com')
+    await user.type(screen.getByLabelText('Senha'), 'senha123')
+    await user.type(screen.getByLabelText('Confirmar senha'), 'senha124')
+    await user.click(screen.getByRole('button', { name: 'Cadastrar' }))
+    expect(await screen.findByText('As senhas não coincidem.')).toBeInTheDocument()
+    expect(supabase.auth.signUp).not.toHaveBeenCalled()
+  })
+
+  it('deve mostrar e ocultar a senha pelo olho', async () => {
+    const user = userEvent.setup()
+    render(<Auth />)
+    const input = screen.getByLabelText('Senha')
+    expect(input).toHaveAttribute('type', 'password')
+    await user.click(screen.getByRole('button', { name: 'Mostrar senha' }))
+    expect(input).toHaveAttribute('type', 'text')
+    await user.click(screen.getByRole('button', { name: 'Ocultar senha' }))
+    expect(input).toHaveAttribute('type', 'password')
   })
 
   it('deve exibir mensagem de limite de tentativas ao receber erro 429 no cadastro', async () => {
@@ -107,7 +133,8 @@ describe('Auth Component', () => {
     await user.click(screen.getByRole('button', { name: /Não tem conta\?/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cadastrar' })).toBeInTheDocument())
     await user.type(screen.getByLabelText(/Email/i), 'teste@email.com')
-    await user.type(screen.getByLabelText(/Senha/i), 'senha123')
+    await user.type(screen.getByLabelText('Senha'), 'senha123')
+    await user.type(screen.getByLabelText('Confirmar senha'), 'senha123')
     await user.click(screen.getByRole('button', { name: 'Cadastrar' }))
     expect(await screen.findByText(/Muitas tentativas em pouco tempo/i)).toBeInTheDocument()
   })
