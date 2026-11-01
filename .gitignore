@@ -9,3 +9,4 @@ SECURITY-AUDIT.md
 supabase/.temp
 supabase/.branches
 SEGREDOS-DEV.md
+supabase/email-confirmacao.html
