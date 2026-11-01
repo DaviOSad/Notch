@@ -4,3 +4,8 @@ dist
 CLAUDE.md
 SECURITY-AUDIT.md
 
+.env.*
+!.env.example
+supabase/.temp
+supabase/.branches
+SEGREDOS-DEV.md

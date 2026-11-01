@@ -1,31 +1,45 @@
 name: Deploy to GitHub Pages
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
 permissions:
   contents: write
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # main = produção (raiz do site); dev = ambiente de testes em /dev/ com outro projeto Supabase.
+    env:
+      IS_PROD: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          
-      - name: Install and Build
+
+      - name: Install
+        run: npm install --legacy-peer-deps
+
+      - name: Test
+        run: npx vitest run
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-        run: |
-          npm install --legacy-peer-deps
-          npm run build
-          
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: teste
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ env.IS_PROD == 'true' && secrets.VITE_SUPABASE_URL || secrets.DEV_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.IS_PROD == 'true' && secrets.VITE_SUPABASE_ANON_KEY || secrets.DEV_SUPABASE_ANON_KEY }}
+          VITE_BASE: ${{ env.IS_PROD == 'true' && '/Finances-Dashboard/' || '/Finances-Dashboard/dev/' }}
+        run: npm run build
+
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
+          destination_dir: ${{ env.IS_PROD == 'true' && '.' || 'dev' }}
+          # Um deploy não pode apagar o do outro ambiente.
+          keep_files: true

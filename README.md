@@ -163,6 +163,13 @@ REVOKE EXECUTE ON FUNCTION delete_own_account() FROM anon;
 GRANT EXECUTE ON FUNCTION delete_own_account() TO authenticated;
 ```
 
+## Environments
+
+- **prod** — branch `main`, root of the site, production Supabase project (secrets `VITE_SUPABASE_*`).
+- **dev** — branch `dev`, published at `/Finances-Dashboard/dev/`, separate Supabase project (secrets `DEV_SUPABASE_URL` / `DEV_SUPABASE_ANON_KEY`).
+- Locally, `npm run dev` reads `.env.development` (gitignored, points at the dev project). The schema lives in `supabase/migrations/`; apply it to a project with `npx supabase link --project-ref <ref>` + `npx supabase db push`.
+- CI runs the test suite before every deploy.
+
 ## Deployment
 
 The project deploys to GitHub Pages automatically on every push to `main` via

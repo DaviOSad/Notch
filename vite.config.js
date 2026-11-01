@@ -46,7 +46,8 @@ const cspProducao = (connectSrc) => ({
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), cspProducao(supabaseOrigin(loadEnv(mode, process.cwd(), '').VITE_SUPABASE_URL))],
-  base: '/Finances-Dashboard/',
+  // O site de dev (branch `dev`) é publicado em /dev/; ver deploy.yml.
+  base: process.env.VITE_BASE || '/Finances-Dashboard/',
   test: {
     globals: true,
     environment: 'jsdom',
