@@ -1,3 +1,4 @@
+import Logo from './Logo'
 import TapeBar from './TapeBar'
 import { COLORS } from '../../lib/constants'
 
@@ -17,7 +18,7 @@ export default function AuthLayout({ title, subtitle, footer, fading = false, ch
     <div className="min-h-screen md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <aside className="sobre-petroleo flex flex-col justify-between bg-petroleo px-6 py-6 text-espuma md:px-12 md:py-14">
         <div>
-          <p className="font-display text-3xl font-extrabold tracking-tight md:text-4xl">Notch</p>
+          <Logo className="text-3xl md:text-4xl" />
           <TapeBar segments={SAMPLE_TAPE} free={22} className="mt-4 h-2.5 max-w-[12rem] md:hidden" />
         </div>
 
