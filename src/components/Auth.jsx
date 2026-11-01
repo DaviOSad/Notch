@@ -125,7 +125,8 @@ function useAuthLogic() {
         return
       }
 
-      setSuccessMessage('Conta criada com sucesso! Verifique seu email.')
+      // Sem confirmação de email o signUp já devolve a sessão e o App entra sozinho.
+      if (!data?.session) setSuccessMessage('Conta criada com sucesso! Verifique seu email.')
       setEmail('')
       setPassword('')
       setConfirmPassword('')
