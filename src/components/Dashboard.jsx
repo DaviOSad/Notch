@@ -1,27 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
-import { LogOut, Plus, Settings, Wallet } from 'lucide-react'
+import { LogOut, Plus, Settings } from 'lucide-react'
 import { supabase } from '../supabaseClient'
 
 import { useFinanceData } from '../hooks/useFinanceData'
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock'
 
 import {
-  COLORS,
   GOAL_DEPOSIT_CATEGORY,
   GOAL_WITHDRAWAL_CATEGORY,
   MONTHS_SHORT,
   PAGE_SIZE,
-  UNCATEGORIZED_COLOR,
-  UNCATEGORIZED_LABEL,
   USD_RATE,
 } from '../lib/constants'
-import { findCategory, getParentCategoryName, getRootCategories, matchesCategoryFilter } from '../lib/categories'
+import { findCategory, matchesCategoryFilter } from '../lib/categories'
+import { buildCategoryColorMap, matchesTypeFilter, spendByCategory, summarizeMonth } from '../lib/summary'
 import { buildTransactionsCsv, downloadCsv } from '../lib/csv'
 import { todayISO } from '../lib/dates'
 
 import MonthSummary from './dashboard/MonthSummary'
 import GoalsCarousel from './dashboard/GoalsCarousel'
-import ExpensesChart from './dashboard/ExpensesChart'
 import TransactionHistory from './dashboard/TransactionHistory'
 import TransactionFormModal from './dashboard/modals/TransactionFormModal'
 import TransactionDetailsModal from './dashboard/modals/TransactionDetailsModal'
@@ -30,13 +27,11 @@ import SettingsModal from './dashboard/modals/SettingsModal'
 import ConfirmDialog from './dashboard/modals/ConfirmDialog'
 import ErrorDialog from './dashboard/modals/ErrorDialog'
 
-const isExpense = (t) => t.type === 'expense' || !t.type
-
 export default function Dashboard({ session }) {
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
-  const [filterType, setFilterType] = useState('') // '' | 'income' | 'expense'
+  const [filterType, setFilterType] = useState('') // '' | 'income' | 'expense' | 'goals'
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   const [showModal, setShowModal] = useState(false)
@@ -79,33 +74,15 @@ export default function Dashboard({ session }) {
   )
 
   // --- DERIVADOS ---
-  const totalIncome = transactions.filter((t) => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0)
-  const totalExpense = transactions.filter(isExpense).reduce((sum, t) => sum + Number(t.amount), 0)
-  const monthlyRemaining = totalIncome - totalExpense
-
-  // Cores fixas por categoria macro, para o gráfico não trocar de cor a cada mês.
-  const categoryColorMap = useMemo(() => {
-    const parentNames = Array.from(new Set(getRootCategories(categories).map((c) => c.name))).sort()
-
-    const map = {}
-    parentNames.forEach((name, index) => { map[name] = COLORS[index % COLORS.length] })
-    map[UNCATEGORIZED_LABEL] = UNCATEGORIZED_COLOR
-    return map
-  }, [categories])
-
-  const chartData = useMemo(() => {
-    const expensesByCategory = transactions.filter(isExpense).reduce((acc, expense) => {
-      const parentName = getParentCategoryName(categories, expense.category_id)
-      acc[parentName] = (acc[parentName] || 0) + Number(expense.amount)
-      return acc
-    }, {})
-    return Object.entries(expensesByCategory)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-  }, [transactions, categories])
+  const { income: totalIncome, expense: totalExpense, goals: totalGoals, remaining: monthlyRemaining } = useMemo(
+    () => summarizeMonth(transactions, categories),
+    [transactions, categories]
+  )
+  const categoryColorMap = useMemo(() => buildCategoryColorMap(categories), [categories])
+  const spend = useMemo(() => spendByCategory(transactions, categories), [transactions, categories])
 
   const filteredTransactions = transactions.filter((t) => {
-    if (filterType && (filterType === 'income' ? t.type !== 'income' : !isExpense(t))) return false
+    if (!matchesTypeFilter(t, filterType, categories)) return false
     if (!matchesCategoryFilter(t, categories, filterCategory)) return false
     if (!searchTerm) return true
 
@@ -250,41 +227,42 @@ export default function Dashboard({ session }) {
   }
 
   return (
-    <div className="relative min-h-screen w-full bg-slate-950 font-sans text-slate-100 overflow-x-hidden selection:bg-cyan-500/30">
-      <div className="mx-auto w-full max-w-lg md:max-w-5xl px-4 pt-6 pb-28 md:pb-12">
+    <div className="relative min-h-screen w-full overflow-x-hidden bg-pagina font-sans text-tinta">
+      <div className="mx-auto w-full max-w-lg px-4 pb-28 pt-5 md:max-w-6xl md:px-8 md:pb-12">
 
-        <header className="flex w-full items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400"><Wallet size={20} /></div>
-            <h1 className="text-xl font-bold leading-none tracking-tight">Nexo</h1>
-          </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-white transition-colors rounded-xl hover:bg-white/5"><Settings size={20} /></button>
-            <button onClick={() => supabase.auth.signOut()} className="p-2 text-slate-400 hover:text-rose-400 transition-colors rounded-xl hover:bg-white/5"><LogOut size={20} /></button>
+        <header className="mb-5 flex w-full items-center justify-between">
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">Nexo</h1>
+          <div className="-mr-2 flex items-center">
+            <button onClick={() => setShowSettings(true)} aria-label="Configurações" title="Configurações" className="btn-icone text-neblina hover:bg-folha hover:text-tinta"><Settings size={21} /></button>
+            <button onClick={() => supabase.auth.signOut()} aria-label="Sair" title="Sair" className="btn-icone text-neblina hover:bg-folha hover:text-saida"><LogOut size={21} /></button>
           </div>
         </header>
 
-        <MonthSummary
-          currentDate={currentDate}
-          onChangeMonth={setCurrentDate}
-          isPickerOpen={showMonthPicker}
-          onTogglePicker={setShowMonthPicker}
-          totalIncome={totalIncome}
-          totalExpense={totalExpense}
-          monthlyRemaining={monthlyRemaining}
-          accumulatedBalance={accumulatedBalance}
-          filterType={filterType}
-          onFilterTypeChange={setFilterType}
-        />
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:gap-10 md:items-start">
+          <div className="flex min-w-0 flex-col gap-8 lg:sticky lg:top-6">
+            <MonthSummary
+              currentDate={currentDate}
+              onChangeMonth={setCurrentDate}
+              isPickerOpen={showMonthPicker}
+              onTogglePicker={setShowMonthPicker}
+              totalIncome={totalIncome}
+              totalExpense={totalExpense}
+              totalGoals={totalGoals}
+              showGoals={goals.length > 0 || totalGoals !== 0}
+              monthlyRemaining={monthlyRemaining}
+              accumulatedBalance={accumulatedBalance}
+              spend={spend}
+              colorMap={categoryColorMap}
+              filterType={filterType}
+              onFilterTypeChange={setFilterType}
+            />
 
-        <GoalsCarousel
-          goals={goals}
-          onManageFunds={(goal, type) => { setFundingGoal(goal); setFundType(type) }}
-          onDeleteGoal={setGoalToDelete}
-        />
-
-        <div className="grid w-full grid-cols-1 md:grid-cols-2 gap-6 items-start">
-          <ExpensesChart data={chartData} colorMap={categoryColorMap} />
+            <GoalsCarousel
+              goals={goals}
+              onManageFunds={(goal, type) => { setFundingGoal(goal); setFundType(type) }}
+              onDeleteGoal={setGoalToDelete}
+            />
+          </div>
 
           <TransactionHistory
             categories={categories}
@@ -305,7 +283,14 @@ export default function Dashboard({ session }) {
         </div>
       </div>
 
-      <button onClick={() => setShowModal(true)} className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 transition-transform active:scale-90 md:bottom-10 md:right-10"><Plus size={28} /></button>
+      <button
+        onClick={() => setShowModal(true)}
+        aria-label="Novo lançamento"
+        className="fixed bottom-6 right-6 z-40 flex h-14 items-center justify-center gap-2 rounded-full bg-caju px-[1.125rem] text-petroleo shadow-xl shadow-petroleo/30 transition-all hover:bg-caju-escuro active:scale-95 md:bottom-10 md:right-10 md:px-6"
+      >
+        <Plus size={26} />
+        <span className="hidden font-semibold md:inline">Novo lançamento</span>
+      </button>
 
       {transactionDetails && (
         <TransactionDetailsModal
@@ -354,7 +339,7 @@ export default function Dashboard({ session }) {
       {categoryToDelete && (
         <ConfirmDialog
           title="Excluir categoria"
-          message={<>Tem certeza que deseja excluir <span className="font-bold text-white">"{categoryToDelete.name}"</span>?</>}
+          message={<>Tem certeza que deseja excluir <span className="font-bold text-tinta">"{categoryToDelete.name}"</span>?</>}
           isBusy={isSaving}
           onCancel={() => setCategoryToDelete(null)}
           onConfirm={executeDeleteCategory}
@@ -364,7 +349,7 @@ export default function Dashboard({ session }) {
       {goalToDelete && (
         <ConfirmDialog
           title="Excluir meta"
-          message={<>Tem certeza que deseja excluir a meta <span className="font-bold text-white">"{goalToDelete.name}"</span>?</>}
+          message={<>Tem certeza que deseja excluir a meta <span className="font-bold text-tinta">"{goalToDelete.name}"</span>?</>}
           isBusy={isSaving}
           onCancel={() => setGoalToDelete(null)}
           onConfirm={executeDeleteGoal}

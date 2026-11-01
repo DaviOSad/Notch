@@ -72,7 +72,15 @@ vi.mock('../../supabaseClient', () => ({
 describe('Dashboard Component - Bateria de Testes Completa', () => {
   const mockSession = { user: { id: 'test-user-id', email: 'teste@teste.com' } }
 
-  beforeEach(() => { vi.clearAllMocks() })
+  // Os dados mockados são de julho/2026 e o Dashboard abre no mês corrente: sem fixar
+  // o relógio, os testes quebram assim que o calendário sai desse mês. Só `Date` é
+  // falsificado, para não travar os timers do user-event.
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 6, 20, 12))
+  })
+  afterEach(() => { vi.useRealTimers() })
 
   // O seletor de categorias é um dropdown próprio (não um <select> nativo): abre ao
   // clicar no combobox e a opção é escolhida clicando na linha da lista.
@@ -562,5 +570,37 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
     expect(mockInsert).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({ is_recurring: true, recurrence_end_date: null })
     ]))
+  })
+  // --- DESCARTAR FORMULÁRIO ---
+  it('deve fechar o formulário intocado com Escape, sem pedir confirmação', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    expect(screen.getByRole('dialog', { name: 'Novo Lançamento' })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('deve pedir confirmação antes de descartar um formulário preenchido', async () => {
+    const user = userEvent.setup()
+    await act(async () => { render(<Dashboard session={mockSession} />) })
+
+    await user.click(document.querySelector('button.fixed.bottom-6'))
+    await user.type(screen.getByPlaceholderText('0,00'), '42')
+    await user.keyboard('{Escape}')
+
+    expect(screen.getByText('Descartar alterações?')).toBeInTheDocument()
+
+    // Cancelar mantém o formulário e o que foi digitado.
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByText('Descartar alterações?')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('0,00')).toHaveValue(42)
+
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Descartar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

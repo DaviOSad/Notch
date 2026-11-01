@@ -21,7 +21,7 @@ Live demo: https://daviosad.github.io/Finances-Dashboard/
 - [React](https://react.dev/) + [Vite](https://vitejs.dev/)
 - [Tailwind CSS](https://tailwindcss.com/)
 - [Supabase](https://supabase.com/) (Postgres, Auth, Row Level Security)
-- [Recharts](https://recharts.org/) for charts
+- [Fontsource](https://fontsource.org/) (Bricolage Grotesque + Hanken Grotesk), self-hosted so the CSP can stay `font-src 'self'`
 - [Vitest](https://vitest.dev/) + [Testing Library](https://testing-library.com/) for tests
 
 The UI copy is in Portuguese (pt-BR), since it was originally built for personal use — the codebase itself (code, comments, this README) is in English.

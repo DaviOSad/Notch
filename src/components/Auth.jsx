@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { supabase } from '../supabaseClient'
+import Alert from './ui/Alert'
+import AuthLayout from './ui/AuthLayout'
+import Field from './ui/Field'
 
 // window.location.origin não inclui o path do GitHub Pages (/Finances-Dashboard/);
 // sem o BASE_URL o link do email cai na raiz do domínio e dá 404.
@@ -141,6 +145,24 @@ function useAuthLogic() {
 }
 
 // --- COMPONENTE VISUAL ---
+const TITLES = {
+  login: 'Entrar no sistema',
+  register: 'Criar nova conta',
+  recovery: 'Recuperar senha',
+}
+
+const SUBTITLES = {
+  login: 'Acesse seu dashboard e controle seus gastos.',
+  register: 'Crie sua conta para acompanhar suas finanças e categorias.',
+  recovery: 'Enviaremos um link para você redefinir sua senha.',
+}
+
+const SUBMIT_LABELS = {
+  login: 'Entrar',
+  register: 'Cadastrar',
+  recovery: 'Enviar link de recuperação',
+}
+
 export default function Auth() {
   const {
     loading, email, setEmail, password, setPassword,
@@ -149,138 +171,79 @@ export default function Auth() {
     handleAuth, toggleMode
   } = useAuthLogic()
 
+  const footer = mode === 'recovery' ? (
+    <button
+      onClick={() => toggleMode('login')}
+      type="button"
+      disabled={isAnimating}
+      className="flex items-center gap-2 text-sm font-medium text-neblina transition-colors hover:text-tinta disabled:cursor-wait"
+    >
+      <ArrowLeft size={16} />
+      Voltar ao Login
+    </button>
+  ) : (
+    <button
+      onClick={() => toggleMode(mode === 'login' ? 'register' : 'login')}
+      type="button"
+      disabled={isAnimating}
+      className="text-sm font-medium text-neblina transition-colors hover:text-tinta disabled:cursor-wait"
+    >
+      {mode === 'login' ? 'Não tem conta? ' : 'Já tem conta? '}
+      <span className="font-semibold text-tinta underline decoration-caju decoration-2 underline-offset-4">
+        {mode === 'login' ? 'Cadastre-se' : 'Entre aqui'}
+      </span>
+    </button>
+  )
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#0f172a] to-[#020617] p-4 font-sans antialiased text-slate-200">
-      <div className="w-full max-w-md bg-[#1e293b]/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 sm:p-10 border border-slate-700/50 relative overflow-hidden">
-        
-        <div className="text-center mb-6">
-          <h3 className="text-sm font-bold text-cyan-400 tracking-[0.2em] uppercase mb-2">
-            Nexo
-          </h3>
-        </div>
+    <AuthLayout title={TITLES[mode]} subtitle={SUBTITLES[mode]} footer={footer} fading={isAnimating}>
+      <div>
+        {errorMessage && <Alert className="mb-5">{errorMessage}</Alert>}
+        {successMessage && <Alert tone="success" className="mb-5">{successMessage}</Alert>}
 
-        <div className={`transition-all duration-300 transform ${isAnimating ? 'opacity-0 scale-95 translate-y-2' : 'opacity-100 scale-100 translate-y-0'}`}>
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-extrabold text-white mb-3">
-              {mode === 'login' && 'Entrar no sistema'}
-              {mode === 'register' && 'Criar nova conta'}
-              {mode === 'recovery' && 'Recuperar senha'}
-            </h2>
-            <p className="text-sm text-slate-400 leading-relaxed h-10">
-              {mode === 'login' && 'Acesse seu dashboard e controle seus gastos.'}
-              {mode === 'register' && 'Crie sua conta para acompanhar suas finanças e categorias.'}
-              {mode === 'recovery' && 'Enviaremos um link para você redefinir sua senha.'}
-            </p>
-          </div>
+        <form onSubmit={handleAuth} noValidate className="flex flex-col gap-5">
+          <Field
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              if (emailError) setEmailError('')
+            }}
+            error={emailError}
+            placeholder="seu@email.com"
+            required
+          />
 
-          {errorMessage && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center text-red-400 text-sm shadow-inner">
-              <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center text-emerald-400 text-sm shadow-inner">
-              <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <span>{successMessage}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleAuth} noValidate className="space-y-6">
+          {mode !== 'recovery' && (
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">Email</label>
-              <input
-                id="email"
-                type="email"
-                value={email}
+              <Field
+                label="Senha"
+                type="password"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                value={password}
                 onChange={(e) => {
-                  setEmail(e.target.value)
-                  if (emailError) setEmailError('')
+                  setPassword(e.target.value)
+                  if (passwordError) setPasswordError('')
                 }}
-                className={`w-full p-3.5 bg-[#0f172a] border ${emailError ? 'border-rose-500' : 'border-slate-700'} rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner`}
-                placeholder="seu@email.com"
+                error={passwordError}
+                placeholder="••••••••"
                 required
               />
-              {emailError && (
-                <span className="text-xs font-medium text-rose-500 mt-2 block px-1">
-                  {emailError}
-                </span>
+              {mode === 'login' && (
+                <button type="button" onClick={() => toggleMode('recovery')} className="mt-3 text-sm font-medium text-neblina underline underline-offset-4 transition-colors hover:text-tinta">
+                  Esqueci a senha?
+                </button>
               )}
             </div>
-            
-            {mode !== 'recovery' && (
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value)
-                    if (passwordError) setPasswordError('') 
-                  }}
-                  className={`w-full p-3.5 bg-[#0f172a] border ${passwordError ? 'border-rose-500' : 'border-slate-700'} rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all outline-none text-white placeholder-slate-600 text-base shadow-inner`}
-                  placeholder="••••••••"
-                  required={mode !== 'recovery'}
-                />
-                {passwordError && (
-                  <span className="text-xs font-medium text-rose-500 mt-2 block px-1">
-                    {passwordError}
-                  </span>
-                )}
-                
-                {/* Botão de Esqueci a senha */}
-                {mode === 'login' && (
-                  <div className="mt-3 flex justify-end">
-                    <button type="button" onClick={() => toggleMode('recovery')} className="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
-                      Esqueci a senha?
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || isAnimating}
-              className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold p-3.5 rounded-xl hover:from-blue-500 hover:to-cyan-400 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-300 mt-4 text-base flex justify-center items-center shadow-lg shadow-blue-500/25"
-            >
-              {loading ? 'Processando...' : mode === 'login' ? 'Entrar' : mode === 'register' ? 'Cadastrar' : 'Enviar link de recuperação'}
-            </button>
-          </form>
-        </div>
-        
-        <div className="mt-8 text-center border-t border-slate-700/50 pt-6">
-          {mode === 'recovery' ? (
-            <button
-              onClick={() => toggleMode('login')}
-              type="button"
-              disabled={isAnimating}
-              className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2 mx-auto disabled:cursor-wait"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-              Voltar ao Login
-            </button>
-          ) : (
-            <button
-              onClick={() => toggleMode(mode === 'login' ? 'register' : 'login')}
-              type="button"
-              disabled={isAnimating}
-              className="text-sm font-medium text-slate-400 hover:text-cyan-400 transition-colors disabled:cursor-wait"
-            >
-              {mode === 'login' ? 'Não tem conta? ' : 'Já tem conta? '}
-              <span className="text-cyan-400 underline decoration-cyan-400/30 underline-offset-4">
-                {mode === 'login' ? 'Cadastre-se' : 'Entre aqui'}
-              </span>
-            </button>
           )}
-        </div>
+
+          <button type="submit" disabled={loading || isAnimating} className="btn-destaque mt-1 py-3.5 text-base">
+            {loading ? 'Processando...' : SUBMIT_LABELS[mode]}
+          </button>
+        </form>
       </div>
-    </div>
+    </AuthLayout>
   )
 }

@@ -8,16 +8,18 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:ui": "vitest --ui"  
-},
+    "test:ui": "vitest --ui"
+  },
   "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/hanken-grotesk": "^5.3.0",
     "@supabase/supabase-js": "^2.39.3",
     "lucide-react": "^0.323.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "recharts": "^2.10.4"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

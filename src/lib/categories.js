@@ -1,4 +1,4 @@
-import { UNCATEGORIZED_LABEL } from './constants'
+import { SYSTEM_CATEGORY_NAMES, UNCATEGORIZED_LABEL } from './constants'
 
 // Ids vindos de um <select> são strings, enquanto os do banco são números —
 // compare sempre por aqui em vez de usar === direto.
@@ -7,6 +7,32 @@ export const sameId = (a, b) => String(a) === String(b)
 export const findCategory = (categories, catId) => categories.find((c) => sameId(c.id, catId))
 
 export const getRootCategories = (categories) => categories.filter((c) => !c.parent_id)
+
+// Categorias de manutenção, criadas sozinhas pelas movimentações de metas. Não são
+// escolhidas nem apagadas à mão: o usuário só as vê no histórico e no filtro.
+export const isSystemCategory = (category) => !category.parent_id && SYSTEM_CATEGORY_NAMES.includes(category.name)
+
+// Aporte/resgate de meta: um lançamento cuja categoria é de manutenção. É dinheiro que
+// mudou de lugar (conta ⇄ caixinha), não gasto nem ganho — por isso tem balde próprio.
+export const isGoalTransaction = (transaction, categories) => {
+  if (transaction.category_id == null) return false
+  const category = findCategory(categories, transaction.category_id)
+  return Boolean(category && isSystemCategory(category))
+}
+
+const GROUP_ORDER = ['Despesas', 'Receitas', 'Metas']
+
+export const getCategoryGroup = (category) => {
+  if (isSystemCategory(category)) return 'Metas'
+  return category.type === 'income' ? 'Receitas' : 'Despesas'
+}
+
+// Raízes rotuladas e ordenadas por grupo (Despesas, Receitas, Metas), para o filtro do
+// histórico, que lista todos os tipos. A ordem original se mantém dentro de cada grupo.
+export const getGroupedRootCategories = (categories) =>
+  getRootCategories(categories)
+    .map((category) => ({ ...category, group: getCategoryGroup(category) }))
+    .sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
 
 export const getSubcategories = (categories, parentId) =>
   categories.filter((c) => c.parent_id === parentId)

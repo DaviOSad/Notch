@@ -5,6 +5,7 @@ import { clearLastSeen, isSessionStale, readLastSeen } from './lib/session'
 import Auth from './components/Auth'
 import Dashboard from './components/Dashboard'
 import ResetPassword from './components/ResetPassword' // Importamos a tela nova
+import Alert from './components/ui/Alert'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -54,19 +55,10 @@ export default function App() {
         3. Se não tem sessão nenhuma, mostra a tela de Auth.
       */}
       {showEmailConfirmedBanner && session && !recoveryMode && (
-        <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-center gap-3 bg-emerald-500/10 border-b border-emerald-500/30 text-emerald-400 text-sm px-4 py-3 shadow-inner">
-          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-          </svg>
-          <span>Email verificado com sucesso!</span>
-          <button
-            type="button"
-            onClick={() => setShowEmailConfirmedBanner(false)}
-            className="ml-2 text-emerald-400/70 hover:text-emerald-400"
-            aria-label="Fechar"
-          >
-            ✕
-          </button>
+        <div className="fixed inset-x-0 top-0 z-[80] flex justify-center p-3">
+          <Alert tone="success" onDismiss={() => setShowEmailConfirmedBanner(false)} className="w-full max-w-md bg-folha shadow-lg">
+            Email verificado com sucesso!
+          </Alert>
         </div>
       )}
       {recoveryMode && session ? (

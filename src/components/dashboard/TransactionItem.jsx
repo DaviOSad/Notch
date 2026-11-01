@@ -1,10 +1,20 @@
 import { Pencil, Repeat, Trash2 } from 'lucide-react'
 import CategoryPath from './CategoryPath'
+import { isGoalTransaction } from '../../lib/categories'
 import { formatShortDate } from '../../lib/dates'
 import { formatCurrency } from '../../lib/formatters'
 
+// Linha do extrato. Em dispositivos com hover, editar/excluir só aparecem ao passar o
+// mouse ou ao focar a linha; no toque (inclusive tablets largos) ficam sempre visíveis.
+const actionClass = 'btn-icone h-8 w-8 text-neblina sm:h-9 sm:w-9 hover:bg-pagina [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100'
+
 export default function TransactionItem({ transaction, categories, onSelect, onEdit, onDelete }) {
   const t = transaction
+  const isIncome = t.type === 'income'
+  // Aporte/resgate de meta é dinheiro que só trocou de lugar: valor neutro, nem verde nem vermelho.
+  const isGoal = isGoalTransaction(t, categories)
+  // Nome para leitores de tela distinguirem uma linha da outra.
+  const label = t.description || formatShortDate(t.expense_date)
 
   const recurrenceLabel = t.recurrence_end_date
     ? `Recorrente até ${formatShortDate(t.recurrence_end_date)}`
@@ -26,30 +36,30 @@ export default function TransactionItem({ transaction, categories, onSelect, onE
       tabIndex={0}
       onClick={() => onSelect(t)}
       onKeyDown={handleKeyDown}
-      className="group flex w-full cursor-pointer items-center justify-between rounded-2xl bg-slate-900/40 p-4 transition-colors hover:bg-slate-900/80 border border-white/5 outline-none focus-visible:ring-1 focus-visible:ring-cyan-500/50"
+      className="group flex w-full cursor-pointer items-center gap-3 px-1 py-3.5 transition-colors hover:bg-folha"
     >
-      <div className="flex flex-1 flex-col min-w-0 pr-4">
-        <p className="flex min-w-0 items-center gap-1.5 text-base font-semibold text-slate-100">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <p className="flex min-w-0 items-center gap-1.5 font-semibold">
           <CategoryPath categories={categories} categoryId={t.category_id} />
         </p>
-        <div className="flex items-center gap-1 mt-0.5">
-          <p className="truncate text-xs text-slate-500">
-            {t.description ? `${t.description} • ` : ''}
-            {formatShortDate(t.expense_date)}
-          </p>
+        <div className="mt-0.5 flex min-w-0 items-center gap-2 text-sm text-neblina">
+          {t.description && <span className="truncate">{t.description}</span>}
+          <span className="shrink-0">{formatShortDate(t.expense_date)}</span>
           {t.is_recurring && (
-            <span title={recurrenceLabel} className="flex shrink-0 items-center ml-1">
-              <Repeat size={12} className="text-cyan-500/70" />
+            <span title={recurrenceLabel} aria-label={recurrenceLabel} className="flex shrink-0 items-center">
+              <Repeat size={13} />
             </span>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <span className={`text-base font-bold mr-1 ${t.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
-          {t.type === 'income' ? '+ ' : '- '}{formatCurrency(t.amount)}
-        </span>
-        <button onClick={actionHandler(() => onEdit(t))} className="text-slate-600 hover:text-cyan-500 transition-colors p-1" title="Editar"><Pencil size={18} /></button>
-        <button onClick={actionHandler(() => onDelete(t.id))} className="text-slate-600 hover:text-rose-500 transition-colors p-1" title="Excluir"><Trash2 size={18} /></button>
+
+      <span className={`shrink-0 font-display text-base font-bold sm:text-lg ${isGoal ? 'text-petroleo' : isIncome ? 'text-entrada' : 'text-saida'}`}>
+        {isIncome ? '+ ' : '- '}{formatCurrency(t.amount)}
+      </span>
+
+      <div className="-mr-1 flex shrink-0">
+        <button onClick={actionHandler(() => onEdit(t))} className={actionClass} title="Editar" aria-label={`Editar lançamento: ${label}`}><Pencil size={17} /></button>
+        <button onClick={actionHandler(() => onDelete(t.id))} className={`${actionClass} hover:text-saida`} title="Excluir" aria-label={`Excluir lançamento: ${label}`}><Trash2 size={17} /></button>
       </div>
     </div>
   )

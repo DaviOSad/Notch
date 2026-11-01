@@ -1,6 +1,9 @@
 import { useState } from 'react'
-import { Download, Trash2, User, X } from 'lucide-react'
+import { Download, Trash2 } from 'lucide-react'
 import { supabase } from '../../../supabaseClient'
+import Alert from '../../ui/Alert'
+import Field from '../../ui/Field'
+import Modal from '../../ui/Modal'
 import ConfirmDialog from './ConfirmDialog'
 import ErrorDialog from './ErrorDialog'
 
@@ -54,57 +57,57 @@ export default function SettingsModal({ session, onClose, onExportCSV }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full md:max-w-lg bg-slate-900 p-6 md:rounded-3xl rounded-t-3xl shadow-2xl transition-transform animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white">Configurações</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
-        </div>
-        <div className="flex flex-col gap-6">
-          <section>
-            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-3 flex items-center gap-2"><User size={16} /> Perfil</h3>
-            <div className="bg-slate-950/50 rounded-2xl p-4 border border-white/5 flex flex-col gap-4">
-              <div><p className="text-xs text-slate-400 mb-1">E-mail conectado</p><p className="text-sm font-medium text-white">{session?.user?.email || 'Usuário'}</p></div>
-              <div className="h-px w-full bg-white/5" />
+    <>
+      <Modal title="Configurações" onClose={onClose} width="md:max-w-lg">
+        <div className="flex flex-col divide-y divide-linha">
+          <section className="pb-6">
+            <h3 className="mb-3 font-display text-lg font-bold">Perfil</h3>
+            <p className="text-sm text-neblina">E-mail conectado</p>
+            <p className="mb-5 break-all font-medium">{session?.user?.email || 'Usuário'}</p>
+
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs text-slate-400 mb-2">Senha</p>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-white tracking-[0.2em] mt-1">••••••••</p>
-                  <button onClick={() => setIsChangingPassword(!isChangingPassword)} className={`text-xs font-bold transition-colors ${isChangingPassword ? 'text-slate-400 hover:text-slate-300' : 'text-cyan-400 hover:text-cyan-300'}`}>{isChangingPassword ? 'Cancelar' : 'Alterar senha'}</button>
-                </div>
+                <p className="text-sm text-neblina">Senha</p>
+                <p className="font-medium tracking-[0.2em]">••••••••</p>
               </div>
-              {isChangingPassword && (
-                <form onSubmit={handleUpdatePassword} noValidate className="mt-2 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
-                  <input type="password" value={newPassword} onChange={(e) => { setNewPassword(e.target.value); clearPasswordFeedback() }} className="w-full rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none border border-white/5" placeholder="Nova senha" />
-                  <input type="password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearPasswordFeedback() }} className="w-full rounded-xl bg-slate-900 px-4 py-3.5 text-sm text-white outline-none border border-white/5" placeholder="Confirmar nova senha" />
-                  {passwordError && <span className="text-xs font-medium text-rose-500 px-1">{passwordError}</span>}
-                  {passwordSuccess && <span className="text-xs font-medium text-emerald-500 px-1">{passwordSuccess}</span>}
-                  <button type="submit" disabled={isUpdatingPassword} className="mt-1 w-full rounded-xl bg-cyan-500 py-3.5 text-sm font-bold text-white transition-colors">{isUpdatingPassword ? 'Atualizando...' : 'Salvar nova senha'}</button>
-                </form>
-              )}
+              <button onClick={() => setIsChangingPassword(!isChangingPassword)} className="btn-neutro !px-3 !py-2">
+                {isChangingPassword ? 'Cancelar' : 'Alterar senha'}
+              </button>
             </div>
+
+            {isChangingPassword && (
+              <form onSubmit={handleUpdatePassword} noValidate className="mt-5 flex animate-surge flex-col gap-3">
+                <Field label="Nova senha" hideLabel type="password" autoComplete="new-password" value={newPassword} onChange={(e) => { setNewPassword(e.target.value); clearPasswordFeedback() }} placeholder="Nova senha" />
+                <Field label="Confirmar nova senha" hideLabel type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearPasswordFeedback() }} placeholder="Confirmar nova senha" />
+                {passwordError && <Alert>{passwordError}</Alert>}
+                {passwordSuccess && <Alert tone="success">{passwordSuccess}</Alert>}
+                <button type="submit" disabled={isUpdatingPassword} className="btn-primario">{isUpdatingPassword ? 'Atualizando...' : 'Salvar nova senha'}</button>
+              </form>
+            )}
           </section>
-          <section>
-            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Download size={16} /> Dados</h3>
-            <button onClick={onExportCSV} className="w-full flex items-center justify-between bg-slate-950/50 hover:bg-slate-800 rounded-2xl p-4 border border-white/5 transition-colors group">
-              <div className="flex flex-col items-start"><span className="text-sm font-medium text-white group-hover:text-cyan-400 transition-colors">Exportar Lançamentos</span><span className="text-xs text-slate-400">Baixar histórico deste mês em .csv</span></div>
-              <Download size={18} className="text-slate-400 group-hover:text-cyan-400 transition-colors" />
+
+          <section className="py-6">
+            <h3 className="mb-3 font-display text-lg font-bold">Dados</h3>
+            <button onClick={onExportCSV} className="group flex w-full items-center justify-between gap-4 rounded-xl border border-linha bg-white px-4 py-3 text-left transition-colors hover:bg-pagina">
+              <span className="flex flex-col"><span className="font-medium">Exportar Lançamentos</span><span className="text-sm text-neblina">Baixar histórico deste mês em .csv</span></span>
+              <Download size={18} className="shrink-0 text-neblina" />
             </button>
           </section>
-          <section>
-            <button onClick={() => setShowDeleteConfirm(true)} className="w-full flex items-center justify-between bg-slate-950/50 hover:bg-rose-500/10 rounded-2xl p-4 border border-rose-500/20 transition-colors group">
-              <div className="flex flex-col items-start"><span className="text-sm font-medium text-rose-400">Excluir conta</span><span className="text-xs text-slate-400">Remove sua conta e todos os dados permanentemente</span></div>
-              <Trash2 size={18} className="text-rose-400" />
+
+          <section className="pt-6">
+            <h3 className="mb-3 font-display text-lg font-bold">Zona de risco</h3>
+            <button onClick={() => setShowDeleteConfirm(true)} className="flex w-full items-center justify-between gap-4 rounded-xl border border-saida/40 px-4 py-3 text-left transition-colors hover:bg-saida/10">
+              <span className="flex flex-col"><span className="font-medium text-saida">Excluir conta</span><span className="text-sm text-neblina">Remove sua conta e todos os dados permanentemente</span></span>
+              <Trash2 size={18} className="shrink-0 text-saida" />
             </button>
           </section>
         </div>
-      </div>
+      </Modal>
 
       {showDeleteConfirm && (
         <ConfirmDialog
           title="Excluir conta"
-          message={<>Tem certeza que deseja excluir sua conta? Todos os seus lançamentos, categorias e metas serão apagados <span className="font-bold text-white">permanentemente</span>. Esta ação não pode ser desfeita.</>}
+          message={<>Tem certeza que deseja excluir sua conta? Todos os seus lançamentos, categorias e metas serão apagados <span className="font-bold text-tinta">permanentemente</span>. Esta ação não pode ser desfeita.</>}
           isBusy={isDeletingAccount}
           confirmLabel="Excluir conta"
           onCancel={() => setShowDeleteConfirm(false)}
@@ -113,6 +116,6 @@ export default function SettingsModal({ session, onClose, onExportCSV }) {
       )}
 
       {deleteError && <ErrorDialog message={deleteError} onClose={() => setDeleteError('')} />}
-    </div>
+    </>
   )
 }

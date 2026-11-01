@@ -15,8 +15,8 @@ export default function CategoryPath({ categories, categoryId }) {
     const parent = findCategory(categories, cat.parent_id)
     return (
       <>
-        <span className="truncate text-slate-400">{parent?.name || 'Pai excluido'}</span>
-        <CornerDownRight size={14} className="text-slate-600 mx-0.5 shrink-0" />
+        <span className="truncate font-medium text-neblina">{parent?.name || 'Pai excluído'}</span>
+        <CornerDownRight size={14} className="mx-0.5 shrink-0 text-neblina/60" />
         <span className="truncate">{cat.name}</span>
       </>
     )

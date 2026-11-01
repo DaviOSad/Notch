@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Modal from '../../ui/Modal'
 import { blockInvalidChars } from '../../../lib/formatters'
 
 // Formulário de aporte/resgate de uma meta. A gravação em si fica no Dashboard,
@@ -25,31 +26,32 @@ export default function FundGoalModal({ goal, fundType, isSaving, onClose, onSub
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full mx-4 max-w-sm rounded-3xl bg-slate-900 p-6 shadow-2xl animate-in zoom-in-95">
-        <h3 className="mb-2 text-xl font-bold text-white">{isDeposit ? 'Adicionar Saldo' : 'Retirar Saldo'}</h3>
-        <p className="mb-4 text-sm text-slate-300">Qual valor você deseja {isDeposit ? 'alocar na' : 'retirar da'} meta <span className="font-bold text-white">"{goal.name}"</span>?</p>
-        <form onSubmit={handleSubmit}>
-          <div className="relative w-full mb-2">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-slate-400">{goal.currency === 'USD' ? '$' : 'R$'}</span>
-            <input
-              type="number" min="0" step="any" onKeyDown={blockInvalidChars} value={amount}
-              onChange={(e) => { setAmount(e.target.value); setError(null) }}
-              autoFocus placeholder="0.00"
-              className={`w-full appearance-none rounded-2xl bg-slate-950 py-4 pl-12 pr-4 text-xl font-bold text-white outline-none focus:ring-1 ${isDeposit ? 'focus:ring-cyan-500/50' : 'focus:ring-rose-500/50'} ${error ? 'border border-rose-500' : ''}`}
-            />
-          </div>
-          {error && <p className="text-xs font-medium text-rose-500 mb-4 px-1">{error}</p>}
+    <Modal variant="dialog" z="z-[60]" title={isDeposit ? 'Adicionar Saldo' : 'Retirar Saldo'} onClose={onClose}>
+      <p className="mb-5 text-sm leading-relaxed text-neblina">
+        Qual valor você deseja {isDeposit ? 'alocar na' : 'retirar da'} meta <span className="font-bold text-tinta">"{goal.name}"</span>?
+      </p>
+      <form onSubmit={handleSubmit}>
+        <div className="relative w-full">
+          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-neblina">{goal.currency === 'USD' ? '$' : 'R$'}</span>
+          <input
+            type="number" min="0" step="any" onKeyDown={blockInvalidChars} value={amount}
+            onChange={(e) => { setAmount(e.target.value); setError(null) }}
+            autoFocus placeholder="0.00"
+            aria-label="Valor"
+            aria-invalid={error ? 'true' : undefined}
+            aria-describedby={error ? 'fund-erro' : undefined}
+            className="campo !py-4 !pl-12 font-display !text-2xl font-bold"
+          />
+        </div>
+        {error && <p id="fund-erro" className="texto-erro mt-2">{error}</p>}
 
-          <div className="flex gap-3 mt-4">
-            <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-slate-800 py-3 font-semibold text-white">Cancelar</button>
-            <button type="submit" disabled={isSaving} className={`flex-1 rounded-xl py-3 font-bold text-white ${isDeposit ? 'bg-cyan-500' : 'bg-rose-500'}`}>
-              {isSaving ? 'Aguarde...' : 'Confirmar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="mt-6 flex gap-3">
+          <button type="button" onClick={onClose} className="btn-neutro flex-1">Cancelar</button>
+          <button type="submit" disabled={isSaving} className={`flex-1 ${isDeposit ? 'btn-primario' : 'btn-perigo'}`}>
+            {isSaving ? 'Aguarde...' : 'Confirmar'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
