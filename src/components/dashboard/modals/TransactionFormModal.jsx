@@ -43,14 +43,15 @@ export default function TransactionFormModal({
   const [description, setDescription] = useState(transactionToEdit?.description || '')
   const [categoryId, setCategoryId] = useState(transactionToEdit?.category_id || '')
   const [isRecurring, setIsRecurring] = useState(transactionToEdit?.is_recurring || false)
-  // Em recorrentes editados a data recebida é a ocorrência projetada no mês visto,
-  // então ela já traz o dia certo do vencimento.
-  const [expenseDate, setExpenseDate] = useState(transactionToEdit?.expense_date || todayISO())
+  // Em recorrentes a linha traz a ocorrência projetada no mês visto; a data editável é
+  // a do início da série (`original_date`), senão salvar moveria a série para este mês.
+  const seriesStart = transactionToEdit?.original_date || transactionToEdit?.expense_date
+  const [expenseDate, setExpenseDate] = useState(seriesStart || todayISO())
   // Duração da recorrência em meses; null = sem fim. A data final não é digitada:
   // sai sempre de data inicial + duração (ver `recurrenceEnd` abaixo).
   const [durationMonths, setDurationMonths] = useState(() => {
     if (!transactionToEdit?.recurrence_end_date) return null
-    const start = parseTransactionDate(transactionToEdit.expense_date)
+    const start = parseTransactionDate(seriesStart)
     const months = countOccurrences(start.getFullYear(), start.getMonth(), transactionToEdit.recurrence_end_date)
     return months > 0 ? months : null
   })

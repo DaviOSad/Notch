@@ -17,6 +17,7 @@ const dummyTransactions = Array.from({ length: 14 }).map((_, i) => ({
 const createChainableMock = (table) => {
   const builder = {
     select: vi.fn().mockReturnThis(),
+    range: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     lte: vi.fn().mockReturnThis(),
     or: vi.fn().mockReturnThis(),

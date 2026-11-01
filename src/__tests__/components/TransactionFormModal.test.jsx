@@ -77,3 +77,23 @@ describe('TransactionFormModal — categorias de manutenção das metas', () => 
     expect(screen.getByRole('button', { name: 'Excluir' })).toBeInTheDocument()
   })
 })
+
+describe('TransactionFormModal — edição de recorrente', () => {
+  it('salva com a data de início da série, não a da ocorrência vista', async () => {
+    const saveTransaction = vi.fn().mockResolvedValue({ error: null })
+    const user = renderForm({
+      saveTransaction,
+      transactionToEdit: {
+        id: 5, amount: 50, description: 'Academia', category_id: 1, type: 'expense', is_recurring: true,
+        expense_date: '2026-03-15', original_date: '2026-01-15', recurrence_end_date: '2026-06-30',
+      },
+    })
+
+    await user.click(screen.getByRole('button', { name: /salvar|atualizar/i }))
+
+    const [payload, id] = saveTransaction.mock.calls[0]
+    expect(id).toBe(5)
+    expect(payload.expense_date).toBe('2026-01-15')
+    expect(payload.recurrence_end_date).toBe('2026-06-30')
+  })
+})

@@ -16,6 +16,7 @@ import { findCategory, matchesCategoryFilter } from '../lib/categories'
 import { buildCategoryColorMap, matchesTypeFilter, spendByCategory, summarizeMonth } from '../lib/summary'
 import { buildTransactionsCsv, downloadCsv } from '../lib/csv'
 import { todayISO } from '../lib/dates'
+import { formatCurrency } from '../lib/formatters'
 
 import Logo from './ui/Logo'
 import MonthSummary from './dashboard/MonthSummary'
@@ -173,13 +174,16 @@ export default function Dashboard({ session }) {
 
     // Se havia dinheiro na meta, devolve para o Resumo do Mês.
     if (refundAmount > 0) {
-      await registerGoalMovement({
+      const { error: refundError } = await registerGoalMovement({
         goal: goalToDelete,
         amount: refundAmount,
         type: 'income',
         categoryName: GOAL_WITHDRAWAL_CATEGORY,
         description: `Resgate Automático: ${goalToDelete.name} (Excluída)`,
       })
+      if (refundError) {
+        setErrorMessage(`Erro ao registrar o resgate de ${formatCurrency(refundAmount)} da meta excluída: ${refundError.message}. Lance esse valor como receita manualmente.`)
+      }
       await fetchTransactions()
       await fetchCategories()
     }

@@ -24,7 +24,7 @@ const expenses = [
 vi.mock('../../supabaseClient', () => {
   const chain = (table) => {
     const b = {
-      select: () => b, order: () => b, lte: () => b, or: () => b, eq: () => b, insert: () => b, update: () => b, delete: () => b,
+      select: () => b, order: () => b, lte: () => b, range: () => b, or: () => b, eq: () => b, insert: () => b, update: () => b, delete: () => b,
       then: (resolve) => resolve({ data: table === 'categories' ? categories : table === 'expenses' ? expenses : [], error: null }),
     }
     return b

@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { getMonthBounds } from '../lib/dates'
 import { buildMonthTransactions, computeAccumulatedBalance } from '../lib/recurrence'
+
+// O PostgREST corta cada resposta em 1000 linhas; lemos em páginas desse tamanho.
+const PAGE = 1000
 
 const byNameAsc = (a, b) => a.name.localeCompare(b.name)
 
@@ -49,18 +52,33 @@ export function useFinanceData(session, currentDate) {
     setCategories(data)
   }, [userId])
 
+  // Só a última chamada vale: navegar rápido entre meses não deixa uma resposta
+  // atrasada de um mês antigo sobrescrever a do mês atual.
+  const latestFetch = useRef(0)
+
   const fetchTransactions = useCallback(async () => {
+    const request = ++latestFetch.current
     const { endDate } = getMonthBounds(currentDate)
+
     // `select('*')` de propósito: pedir colunas pelo nome faz a query inteira falhar
     // (e o mês aparecer vazio) se o banco ainda não tiver alguma delas.
-    const { data, error } = await supabase
-      .from('expenses')
-      .select('*')
-      .lte('expense_date', endDate)
+    const rows = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .lte('expense_date', endDate)
+        .order('id')
+        .range(from, from + PAGE - 1)
 
-    if (error) return console.error(error)
-    setTransactions(buildMonthTransactions(data, currentDate))
-    setAccumulatedBalance(computeAccumulatedBalance(data, currentDate))
+      if (error) return console.error(error)
+      rows.push(...data)
+      if (data.length < PAGE) break
+    }
+
+    if (request !== latestFetch.current) return
+    setTransactions(buildMonthTransactions(rows, currentDate))
+    setAccumulatedBalance(computeAccumulatedBalance(rows, currentDate))
   }, [currentDate])
 
   useEffect(() => {

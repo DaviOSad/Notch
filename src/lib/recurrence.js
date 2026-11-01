@@ -24,7 +24,8 @@ export const countOccurrences = (startYear, startMonth, endDate) => {
 const buildOccurrenceForMonth = (transaction, viewedYear, viewedMonth) => {
   const originalDay = Number.parseInt(transaction.expense_date.split('-')[2], 10)
   const safeDay = Math.min(originalDay, lastDayOfMonth(viewedYear, viewedMonth))
-  return { ...transaction, expense_date: buildISODate(viewedYear, viewedMonth, safeDay) }
+  // `original_date` mantém o início da série: editar uma ocorrência não pode reancorá-la.
+  return { ...transaction, expense_date: buildISODate(viewedYear, viewedMonth, safeDay), original_date: transaction.expense_date }
 }
 
 const byDateThenCreationDesc = (a, b) => {

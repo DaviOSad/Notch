@@ -1,7 +1,9 @@
 // Helpers de data. As datas de lançamento são strings 'YYYY-MM-DD' (sem fuso),
 // por isso a leitura usa meio-dia para evitar deslocamento de timezone.
 
-export const toISODate = (date) => date.toISOString().split('T')[0]
+// Partes locais, não toISOString (UTC): às 22h no Brasil o UTC já é o dia seguinte.
+export const toISODate = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 export const todayISO = () => toISODate(new Date())
 

@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => ({
   test: {
     globals: true,
     environment: 'jsdom',
+    globalSetup: './tzSetup.js',
     setupFiles: './setupTests.jsx',
     css: false,
   },

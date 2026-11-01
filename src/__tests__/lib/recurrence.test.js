@@ -121,3 +121,12 @@ describe('countOccurrences', () => {
     expect(countOccurrences(2026, 6, '')).toBeNull()
   })
 })
+
+describe('ocorrência projetada preserva a data original da série', () => {
+  it('guarda a data de início em original_date ao projetar para outro mês', () => {
+    const rows = [{ id: 1, amount: 50, expense_date: '2026-01-15', is_recurring: true, type: 'expense' }]
+    const [march] = buildMonthTransactions(rows, new Date(2026, 2, 10))
+    expect(march.expense_date).toBe('2026-03-15')
+    expect(march.original_date).toBe('2026-01-15')
+  })
+})
