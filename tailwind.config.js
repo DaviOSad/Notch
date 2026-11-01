@@ -1,5 +1,9 @@
+// Cores que mudam no modo escuro vêm de variáveis CSS (ver index.css).
+const v = (n) => `rgb(var(--${n}) / <alpha-value>)`
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
@@ -10,17 +14,18 @@ export default {
       // Paleta do Nexo. Sobre a página clara usa-se `saida`/`entrada`; sobre o
       // petróleo, as versões `-claro` (mesmo significado, contraste refeito).
       colors: {
-        pagina: '#E8EEEB',
-        folha: '#F5F8F6',
-        linha: '#C9D6D1',
-        tinta: '#12282B',
-        neblina: '#4C6763',
-        petroleo: { DEFAULT: '#0E2A2D', alto: '#17393D', linha: '#2A5155' },
+        pagina: v('pagina'),
+        folha: v('folha'),
+        papel: v('papel'),
+        linha: v('linha'),
+        tinta: v('tinta'),
+        neblina: v('neblina'),
+        petroleo: { DEFAULT: v('petroleo'), alto: v('petroleo-alto'), linha: v('petroleo-linha') },
         espuma: '#EAF2EF',
         bruma: '#A9C4BF',
         caju: { DEFAULT: '#F2A900', escuro: '#D99700' },
-        entrada: { DEFAULT: '#12754A', claro: '#72D6A3' },
-        saida: { DEFAULT: '#B3362A', claro: '#FF9C8A' },
+        entrada: { DEFAULT: v('entrada'), claro: '#72D6A3' },
+        saida: { DEFAULT: v('saida'), claro: '#FF9C8A' },
       },
       borderRadius: {
         folha: '28px',

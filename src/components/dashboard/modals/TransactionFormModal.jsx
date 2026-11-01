@@ -218,7 +218,7 @@ export default function TransactionFormModal({
   ]
 
   const chipClass = (active) =>
-    `rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors ${active ? 'border-petroleo bg-petroleo text-espuma' : 'border-linha bg-white text-neblina hover:text-tinta'}`
+    `rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors ${active ? 'border-petroleo bg-petroleo text-espuma' : 'border-linha bg-papel text-neblina hover:text-tinta'}`
 
   return (
     <>
@@ -331,7 +331,7 @@ export default function TransactionFormModal({
                       onClick={() => setIsAddingCategory(true)}
                       title="Criar nova categoria"
                       aria-label="Criar nova categoria"
-                      className="btn-icone h-[46px] w-[46px] shrink-0 border border-linha bg-white text-petroleo hover:bg-pagina"
+                      className="btn-icone h-[46px] w-[46px] shrink-0 border border-linha bg-papel text-petroleo hover:bg-pagina"
                     >
                       <Plus size={20} />
                     </button>

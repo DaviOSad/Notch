@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Download, Trash2 } from 'lucide-react'
 import { supabase } from '../../../supabaseClient'
+import { applyTheme } from '../../../lib/theme'
 import Alert from '../../ui/Alert'
 import Field from '../../ui/Field'
 import Modal from '../../ui/Modal'
@@ -8,6 +9,9 @@ import ConfirmDialog from './ConfirmDialog'
 import ErrorDialog from './ErrorDialog'
 
 export default function SettingsModal({ session, onClose, onExportCSV }) {
+  const [theme, setThemeState] = useState(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light')
+  const setTheme = (t) => { applyTheme(t); setThemeState(t) }
+
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -87,8 +91,25 @@ export default function SettingsModal({ session, onClose, onExportCSV }) {
           </section>
 
           <section className="py-6">
+            <h3 className="mb-3 font-display text-lg font-bold">Aparência</h3>
+            <div className="flex items-center justify-between gap-4">
+              <span className="font-medium">Modo escuro</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={theme === 'dark'}
+                aria-label="Modo escuro"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${theme === 'dark' ? 'bg-caju' : 'bg-linha'}`}
+              >
+                <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-papel shadow transition-transform ${theme === 'dark' ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+          </section>
+
+          <section className="py-6">
             <h3 className="mb-3 font-display text-lg font-bold">Dados</h3>
-            <button onClick={onExportCSV} className="group flex w-full items-center justify-between gap-4 rounded-xl border border-linha bg-white px-4 py-3 text-left transition-colors hover:bg-pagina">
+            <button onClick={onExportCSV} className="group flex w-full items-center justify-between gap-4 rounded-xl border border-linha bg-papel px-4 py-3 text-left transition-colors hover:bg-pagina">
               <span className="flex flex-col"><span className="font-medium">Exportar Lançamentos</span><span className="text-sm text-neblina">Baixar histórico deste mês em .csv</span></span>
               <Download size={18} className="shrink-0 text-neblina" />
             </button>

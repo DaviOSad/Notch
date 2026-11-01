@@ -63,3 +63,25 @@ describe('SettingsModal - Exclusão de conta', () => {
     expect(supabase.auth.signOut).not.toHaveBeenCalled()
   })
 })
+
+describe('SettingsModal - Tema', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.classList.remove('dark')
+  })
+
+  it('alterna o modo escuro pelo interruptor de aparência', async () => {
+    const user = userEvent.setup()
+    render(<SettingsModal session={session} onClose={vi.fn()} onExportCSV={vi.fn()} />)
+
+    const toggle = screen.getByRole('switch', { name: /modo escuro/i })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    await user.click(toggle)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+})

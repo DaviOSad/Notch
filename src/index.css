@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Canais RGB das cores que trocam no modo escuro (usadas via tailwind.config.js). */
+:root {
+  --pagina: 232 238 235;
+  --folha: 245 248 246;
+  --papel: 255 255 255;
+  --linha: 201 214 209;
+  --tinta: 18 40 43;
+  --neblina: 76 103 99;
+  --petroleo: 14 42 45;
+  --petroleo-alto: 23 57 61;
+  --petroleo-linha: 42 81 85;
+  --entrada: 18 117 74;
+  --saida: 179 54 42;
+  color-scheme: light;
+}
+.dark {
+  --pagina: 9 22 24;
+  --folha: 16 36 39;
+  --papel: 20 44 48;
+  --linha: 38 66 70;
+  --tinta: 232 240 237;
+  --neblina: 148 175 170;
+  --petroleo: 24 66 70;
+  --petroleo-alto: 32 84 88;
+  --petroleo-linha: 52 104 108;
+  --entrada: 72 200 140;
+  --saida: 255 128 112;
+  color-scheme: dark;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -11,8 +41,8 @@ body {
   margin: 0;
   font-family: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
-  background-color: #E8EEEB;
-  color: #12282B;
+  background-color: rgb(var(--pagina));
+  color: rgb(var(--tinta));
   -webkit-font-smoothing: antialiased;
 }
 
@@ -27,7 +57,7 @@ body {
 
 /* Foco sempre visível; sobre o petróleo o anel troca para o caju. */
 :focus-visible {
-  outline: 2px solid #0E2A2D;
+  outline: 2px solid rgb(var(--tinta));
   outline-offset: 2px;
 }
 /* Painéis de diálogo recebem foco por código (tabIndex -1); não são controles. */
@@ -39,13 +69,13 @@ body {
 }
 /* Painéis claros que flutuam sobre o petróleo (ex.: seletor de mês). */
 .sobre-folha :focus-visible {
-  outline-color: #0E2A2D;
+  outline-color: rgb(var(--tinta));
 }
 
 /* Peças repetidas em formulários e diálogos. */
 @layer components {
   .campo {
-    @apply w-full rounded-xl border border-linha bg-white px-4 py-3 text-sm text-tinta transition-colors placeholder:text-neblina/90 focus:border-petroleo focus:outline-none focus:ring-2 focus:ring-petroleo/20;
+    @apply w-full rounded-xl border border-linha bg-papel px-4 py-3 text-sm text-tinta transition-colors placeholder:text-neblina/90 focus:border-petroleo focus:outline-none focus:ring-2 focus:ring-petroleo/20;
   }
   .campo[aria-invalid='true'] {
     @apply border-saida focus:border-saida focus:ring-saida/20;
@@ -67,10 +97,10 @@ body {
     @apply btn bg-caju text-petroleo hover:bg-caju-escuro;
   }
   .btn-neutro {
-    @apply btn border border-linha bg-white text-tinta hover:bg-folha;
+    @apply btn border border-linha bg-papel text-tinta hover:bg-folha;
   }
   .btn-perigo {
-    @apply btn bg-saida text-white hover:bg-red-900;
+    @apply btn bg-saida text-white hover:bg-red-900 dark:text-pagina dark:hover:bg-saida-claro;
   }
 
   /* Botão só de ícone: área de toque de 40px mesmo com ícone pequeno. */

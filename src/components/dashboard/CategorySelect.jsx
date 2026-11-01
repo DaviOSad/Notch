@@ -30,7 +30,7 @@ export default function CategorySelect({
   parentHint,
   hasError = false,
   className = '',
-  triggerClassName = 'rounded-xl border border-linha bg-white px-4 py-3 hover:border-neblina',
+  triggerClassName = 'rounded-xl border border-linha bg-papel px-4 py-3 hover:border-neblina',
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
