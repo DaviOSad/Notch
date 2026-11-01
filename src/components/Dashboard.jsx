@@ -231,7 +231,7 @@ export default function Dashboard({ session }) {
       <div className="mx-auto w-full max-w-lg px-4 pb-28 pt-5 md:max-w-6xl md:px-8 md:pb-12">
 
         <header className="mb-5 flex w-full items-center justify-between">
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">Nexo</h1>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">Notch</h1>
           <div className="-mr-2 flex items-center">
             <button onClick={() => setShowSettings(true)} aria-label="Configurações" title="Configurações" className="btn-icone text-neblina hover:bg-folha hover:text-tinta"><Settings size={21} /></button>
             <button onClick={() => supabase.auth.signOut()} aria-label="Sair" title="Sair" className="btn-icone text-neblina hover:bg-folha hover:text-saida"><LogOut size={21} /></button>

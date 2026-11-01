@@ -32,7 +32,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ env.IS_PROD == 'true' && secrets.VITE_SUPABASE_URL || secrets.DEV_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ env.IS_PROD == 'true' && secrets.VITE_SUPABASE_ANON_KEY || secrets.DEV_SUPABASE_ANON_KEY }}
-          VITE_BASE: ${{ env.IS_PROD == 'true' && '/Finances-Dashboard/' || '/Finances-Dashboard/dev/' }}
+          VITE_BASE: ${{ env.IS_PROD == 'true' && '/Notch/' || '/Notch/dev/' }}
         run: npm run build
 
       - name: Deploy

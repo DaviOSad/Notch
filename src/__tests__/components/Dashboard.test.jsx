@@ -92,7 +92,7 @@ describe('Dashboard Component - Bateria de Testes Completa', () => {
   // --- 1. RENDERIZAÇÃO E HISTÓRICO ---
   it('deve renderizar a tela inicial com dados mockados', async () => {
     await act(async () => { render(<Dashboard session={mockSession} />) })
-    expect(screen.getByText('Nexo')).toBeInTheDocument()
+    expect(screen.getByText('Notch')).toBeInTheDocument()
     expect(screen.getByText(/Conta de Luz/i)).toBeInTheDocument()
   })
 

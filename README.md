@@ -1,10 +1,10 @@
-# Nexo — Personal Finance Dashboard
+# Notch — Personal Finance Dashboard
 
 A personal finance dashboard built with **React + Vite**, backed directly by **Supabase** (Postgres + Auth) — no custom backend server. Track expenses and income, organize them by category, set up recurring transactions, and save toward goals ("caixinhas").
 
 > **Status: personal project / MVP.** This is a side project I built to manage my own finances and to learn/experiment along the way. Scope, data model, and UI are still evolving. Expect rough edges, and use it with that in mind — especially before trusting it with real financial data of your own.
 
-Live demo: https://daviosad.github.io/Finances-Dashboard/
+Live demo: https://daviosad.github.io/Notch/
 
 ## Features
 
@@ -166,7 +166,7 @@ GRANT EXECUTE ON FUNCTION delete_own_account() TO authenticated;
 ## Environments
 
 - **prod** — branch `main`, root of the site, production Supabase project (secrets `VITE_SUPABASE_*`).
-- **dev** — branch `dev`, published at `/Finances-Dashboard/dev/`, separate Supabase project (secrets `DEV_SUPABASE_URL` / `DEV_SUPABASE_ANON_KEY`).
+- **dev** — branch `dev`, published at `/Notch/dev/`, separate Supabase project (secrets `DEV_SUPABASE_URL` / `DEV_SUPABASE_ANON_KEY`).
 - Locally, `npm run dev` reads `.env.development` (gitignored, points at the dev project). The schema lives in `supabase/migrations/`; apply it to a project with `npx supabase link --project-ref <ref>` + `npx supabase db push`.
 - CI runs the test suite before every deploy.
 

@@ -11,7 +11,7 @@ export default {
         display: ['"Bricolage Grotesque Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         sans: ['"Hanken Grotesk Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
-      // Paleta do Nexo. Sobre a página clara usa-se `saida`/`entrada`; sobre o
+      // Paleta do Notch. Sobre a página clara usa-se `saida`/`entrada`; sobre o
       // petróleo, as versões `-claro` (mesmo significado, contraste refeito).
       colors: {
         pagina: v('pagina'),

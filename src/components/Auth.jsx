@@ -5,7 +5,7 @@ import Alert from './ui/Alert'
 import AuthLayout from './ui/AuthLayout'
 import Field from './ui/Field'
 
-// window.location.origin não inclui o path do GitHub Pages (/Finances-Dashboard/);
+// window.location.origin não inclui o path do GitHub Pages (/Notch/);
 // sem o BASE_URL o link do email cai na raiz do domínio e dá 404.
 const authRedirectUrl = window.location.origin + import.meta.env.BASE_URL
 

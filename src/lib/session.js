@@ -4,7 +4,7 @@
 
 export const SESSION_MAX_IDLE_MS = 2 * 24 * 60 * 60 * 1000
 
-const LAST_SEEN_KEY = 'nexo:ultimo-acesso'
+const LAST_SEEN_KEY = 'notch:ultimo-acesso'
 
 /**
  * `lastSeen` é o carimbo local do último uso; `lastSignInAt` vem do servidor e não

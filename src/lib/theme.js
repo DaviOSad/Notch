@@ -1,4 +1,4 @@
-export const THEME_KEY = 'nexo:tema'
+export const THEME_KEY = 'notch:tema'
 
 // Escolha salva vence; sem ela, segue o tema do sistema.
 export function getInitialTheme(prefersDark) {
