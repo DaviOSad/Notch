@@ -1,0 +1,22 @@
+{
+  "short_name": "Nexo",
+  "name": "Nexo",
+  "icons": [
+    {
+      "src": "app-icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "app-icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/Finances-Dashboard/",
+  "display": "standalone",
+  "theme_color": "#0E2A2D",
+  "background_color": "#0E2A2D"
+}
