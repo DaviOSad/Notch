@@ -32,7 +32,7 @@ export default function AuthLayout({ title, subtitle, footer, fading = false, ch
 
       <main className="flex items-center px-6 py-10 md:px-16">
         <div className="w-full max-w-sm">
-          <div className={`transition-all duration-300 motion-reduce:transition-none ${fading ? 'translate-y-2 scale-[0.97] opacity-0' : ''}`}>
+          <div className={`${fading ? 'translate-y-2 scale-[0.97] opacity-0 transition-all duration-300 motion-reduce:transition-none' : ''}`}>
             <h1 className="mb-2 font-display text-3xl font-bold tracking-tight">{title}</h1>
             {subtitle && <p className="mb-8 min-h-[2.75rem] text-sm leading-relaxed text-neblina">{subtitle}</p>}
             {children}
